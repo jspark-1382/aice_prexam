@@ -424,14 +424,14 @@ export default function AdminPanel({ onExit }) {
   };
 
   // Student Attempt Operations
-  const handleDeleteAttempt = async (attemptId) => {
-    if (!window.confirm('해당 수험자의 모든 응시 기록을 삭제하시겠습니까?')) return;
+  const handleDeleteAttempt = async (attemptRecord) => {
+    if (!window.confirm('해당 수험자와 모든 응시 기록을 삭제하시겠습니까?')) return;
     setIsSyncing(true);
     try {
       const { error } = await supabase
-        .from('QuizAttempt')
+        .from('User')
         .delete()
-        .eq('id', attemptId);
+        .eq('id', attemptRecord.user);
 
       if (error) throw error;
       fetchAttempts(selectedExamId);
@@ -1011,7 +1011,7 @@ export default function AdminPanel({ onExit }) {
                                 <button
                                   type="button"
                                   className="btn-table btn-table-delete"
-                                  onClick={() => handleDeleteAttempt(att.id)}
+                                  onClick={() => handleDeleteAttempt(att)}
                                 >
                                   삭제
                                 </button>
