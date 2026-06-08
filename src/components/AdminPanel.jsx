@@ -492,6 +492,62 @@ export default function AdminPanel({ onExit }) {
     URL.revokeObjectURL(url);
   };
 
+  const handleDownloadSampleCsv = () => {
+    const csvContent = 
+      "Category,QuestionText,Type,Options(pipe-split),CorrectAnswers(pipe-split),CorrectAnswerIndex,Explanation,TimeLimit,Reference\n" +
+      "\"데이터 분석\",\"회귀분석 설명으로 적절하지 않은 것은?\",\"multiple-choice\",\"설명력 지표는 R2 Score이다|종속변수는 범주형이다|독립변수가 여러 개면 다중회귀분석이다\",\"\",1,\"회귀분석의 종속변수는 수치 연속형입니다.\",120,\"\"\n" +
+      "\"데이터 분석\",\"범주형 변수를 수치형 피처로 생성하는 변환 기법의 명칭은?\",\"short-answer\",\"\",\"원핫인코딩|원핫 인코딩|one-hot encoding\",,\"원핫 인코딩에 대한 설명입니다.\",120,\"\"";
+      
+    // UTF-8 BOM to prevent Excel encoding crash
+    const blob = new Blob(["\uFEFF" + csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = "sample_question_template.csv";
+    link.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const handleDownloadSampleJson = () => {
+    const sampleJson = [
+      {
+        category: "데이터 분석",
+        questionText: "회귀분석 설명으로 적절하지 않은 것은?",
+        type: "multiple-choice",
+        options: [
+          "설명력 지표는 R2 Score이다",
+          "종속변수는 범주형이다",
+          "독립변수가 여러 개면 다중회귀분석이다"
+        ],
+        correctAnswerIndex: 1,
+        explanation: "회귀분석의 종속변수는 수치 연속형입니다.",
+        timeLimit: 120,
+        reference: null
+      },
+      {
+        category: "데이터 분석",
+        questionText: "범주형 변수를 수치형 피처로 생성하는 변환 기법의 명칭은?",
+        type: "short-answer",
+        correctAnswers: [
+          "원핫인코딩",
+          "원핫 인코딩",
+          "one-hot encoding"
+        ],
+        explanation: "원핫 인코딩에 대한 설명입니다.",
+        timeLimit: 120,
+        reference: null
+      }
+    ];
+
+    const blob = new Blob([JSON.stringify(sampleJson, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = "sample_question_template.json";
+    link.click();
+    URL.revokeObjectURL(url);
+  };
+
   const handleDragOver = (e) => {
     e.preventDefault();
     setIsDragOver(true);
@@ -1073,6 +1129,25 @@ export default function AdminPanel({ onExit }) {
                 {importMessage.text}
               </div>
             )}
+
+            <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.75rem' }}>
+              <button 
+                type="button" 
+                className="btn btn-secondary btn-full"
+                style={{ fontSize: '0.75rem', padding: '0.5rem' }}
+                onClick={handleDownloadSampleCsv}
+              >
+                <Download size={12} /> 샘플 CSV 다운로드
+              </button>
+              <button 
+                type="button" 
+                className="btn btn-secondary btn-full"
+                style={{ fontSize: '0.75rem', padding: '0.5rem' }}
+                onClick={handleDownloadSampleJson}
+              >
+                <Download size={12} /> 샘플 JSON 다운로드
+              </button>
+            </div>
 
             <button 
               type="button" 
