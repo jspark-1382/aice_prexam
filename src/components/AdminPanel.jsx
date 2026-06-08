@@ -658,7 +658,7 @@ export default function AdminPanel({ onExit }) {
             </button>
             <div className="logo-icon">A</div>
             <div className="logo-text">
-              <h1>AICE Basic Mock CBT</h1>
+              <h1>AICE Basic 모의고사</h1>
               <span>통합 관리자 모드</span>
             </div>
           </div>

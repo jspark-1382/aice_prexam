@@ -84,7 +84,7 @@ export default function ResultsPanel({
           <div className="header-left">
             <div className="logo-icon">A</div>
             <div className="logo-text">
-              <h1>AICE Basic Mock CBT</h1>
+              <h1>AICE Basic 모의고사</h1>
               <span>수험 결과</span>
             </div>
           </div>
@@ -260,7 +260,7 @@ export default function ResultsPanel({
 
       <footer>
         <div className="footer-container">
-          <p>© 2026 AICE Basic Mock CBT. All rights reserved.</p>
+          <p>© 2026 AICE Basic 모의고사. All rights reserved.</p>
         </div>
       </footer>
     </>

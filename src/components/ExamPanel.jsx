@@ -374,7 +374,7 @@ export default function ExamPanel({
           <div className="header-left">
             <div className="logo-icon">A</div>
             <div className="logo-text">
-              <h1>AICE Basic Mock CBT</h1>
+              <h1>AICE Basic 모의고사</h1>
               <span>수험자: {user.displayName}</span>
             </div>
           </div>
@@ -583,7 +583,7 @@ export default function ExamPanel({
 
       <footer>
         <div className="footer-container">
-          <p>© 2026 AICE Basic Mock CBT. All rights reserved.</p>
+          <p>© 2026 AICE Basic 모의고사. All rights reserved.</p>
         </div>
       </footer>
     </>

@@ -215,8 +215,8 @@ export default function Login({ exams, onLoginSuccess, onAdminLogin, theme, togg
         <div className="login-logo-container">
           <div className="logo-icon">A</div>
           <div className="login-logo-text">
-            <h2>AICE Basic Mock Exam</h2>
-            <span>컴퓨터 기반 시험 (CBT) 시스템</span>
+            <h2>AICE Basic 모의고사</h2>
+            <span>CBT 평가 시스템 로그인</span>
           </div>
         </div>
 
