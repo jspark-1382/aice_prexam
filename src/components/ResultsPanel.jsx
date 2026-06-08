@@ -14,7 +14,7 @@ export default function ResultsPanel({
   const [strokeOffset, setStrokeOffset] = useState(439.8); // Circumference for r=70 (2 * pi * 70 = 439.82)
   const [isLoading, setIsLoading] = useState(true);
 
-  const score = attempt.score !== null ? attempt.score : 0;
+  const score = (attempt && attempt.score !== null && attempt.score !== undefined) ? attempt.score : 0;
   const isPass = score >= 60; // Standard passing score is 60
 
   useEffect(() => {
