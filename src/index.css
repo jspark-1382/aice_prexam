@@ -1496,6 +1496,10 @@ body.dark-theme .markdown-desc-box code {
   height: calc(100vh - 120px);
 }
 
+.split-layout-active.right-panel-collapsed {
+  grid-template-columns: 1fr !important;
+}
+
 @media (max-width: 1200px) {
   .split-layout-active {
     grid-template-columns: 1fr !important;

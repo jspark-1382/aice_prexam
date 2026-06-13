@@ -27,6 +27,9 @@ export default function ExamPanel({
   const [selectedColumns, setSelectedColumns] = useState([]);
   const [analysisResults, setAnalysisResults] = useState(null);
   const [aiduTab, setAiduTab] = useState('import'); // 'import' | 'describe' | 'sample'
+  const [dataRangeStart, setDataRangeStart] = useState(0);
+  const [dataRangeEnd, setDataRangeEnd] = useState(0);
+  const [rightPanelCollapsed, setRightPanelCollapsed] = useState(false);
 
   // Auto-sync intervals reference
   const syncTimerRef = useRef(null);
@@ -378,46 +381,81 @@ export default function ExamPanel({
   // AIDU Platform Simulation Functions
   // ==========================================
   const parseCsvData = (text) => {
-    const lines = text.split(/\r?\n/);
-    if (lines.length === 0) return { headers: [], rows: [] };
-    
-    // Parse header row
-    const headers = splitCsvRow(lines[0]);
     const rows = [];
-    
-    for (let i = 1; i < lines.length; i++) {
-      const line = lines[i].trim();
-      if (!line) continue;
-      
-      const cells = splitCsvRow(line);
-      if (cells.length === headers.length) {
-        const row = {};
-        headers.forEach((h, idx) => {
-          row[h] = cells[idx];
-        });
-        rows.push(row);
-      }
-    }
-    return { headers, rows };
-  };
-
-  const splitCsvRow = (line) => {
-    const cells = [];
+    let currentRow = [];
+    let currentCell = '';
     let inQuotes = false;
-    let cell = '';
-    for (let i = 0; i < line.length; i++) {
-      const c = line[i];
-      if (c === '"') {
-        inQuotes = !inQuotes;
-      } else if (c === ',' && !inQuotes) {
-        cells.push(cell.trim());
-        cell = '';
+    
+    let i = 0;
+    while (i < text.length) {
+      const c = text[i];
+      const nextC = text[i + 1];
+      
+      if (inQuotes) {
+        if (c === '"') {
+          if (nextC === '"') {
+            currentCell += '"';
+            i += 2;
+            continue;
+          } else {
+            inQuotes = false;
+            i++;
+            continue;
+          }
+        } else {
+          currentCell += c;
+          i++;
+        }
       } else {
-        cell += c;
+        if (c === '"') {
+          inQuotes = true;
+          i++;
+        } else if (c === ',') {
+          currentRow.push(currentCell.trim());
+          currentCell = '';
+          i++;
+        } else if (c === '\r' || c === '\n') {
+          currentRow.push(currentCell.trim());
+          currentCell = '';
+          
+          if (currentRow.length > 0 && (currentRow.length > 1 || currentRow[0] !== '')) {
+            rows.push(currentRow);
+          }
+          currentRow = [];
+          
+          if (c === '\r' && nextC === '\n') {
+            i += 2;
+          } else {
+            i++;
+          }
+        } else {
+          currentCell += c;
+          i++;
+        }
       }
     }
-    cells.push(cell.trim());
-    return cells;
+    
+    if (currentCell || currentRow.length > 0) {
+      currentRow.push(currentCell.trim());
+      if (currentRow.length > 0 && (currentRow.length > 1 || currentRow[0] !== '')) {
+        rows.push(currentRow);
+      }
+    }
+    
+    if (rows.length === 0) return { headers: [], rows: [] };
+    
+    const headers = rows[0];
+    const dataRows = [];
+    
+    for (let r = 1; r < rows.length; r++) {
+      const rowData = {};
+      headers.forEach((h, idx) => {
+        rowData[h] = rows[r][idx] !== undefined ? rows[r][idx] : '';
+      });
+      dataRows.push(rowData);
+    }
+    
+    return { headers, rows: dataRows };
   };
 
   const handleAiduFileUpload = (file) => {
@@ -428,7 +466,22 @@ export default function ExamPanel({
     
     const reader = new FileReader();
     reader.onload = (e) => {
-      const text = e.target.result;
+      const arrayBuffer = e.target.result;
+      
+      let text;
+      try {
+        const utf8Decoder = new TextDecoder('utf-8', { fatal: true });
+        text = utf8Decoder.decode(arrayBuffer);
+      } catch {
+        try {
+          const eucKrDecoder = new TextDecoder('euc-kr');
+          text = eucKrDecoder.decode(arrayBuffer);
+        } catch {
+          alert('파일 디코딩 실패: 파일의 인코딩을 확인해 주세요.');
+          return;
+        }
+      }
+      
       const parsed = parseCsvData(text);
       if (parsed.headers.length === 0) {
         alert('올바르지 않은 CSV 데이터 구조입니다.');
@@ -440,11 +493,17 @@ export default function ExamPanel({
         [file.name]: parsed
       }));
       setActiveFilename(file.name);
-      setSelectedColumns([]);
+      setSelectedColumns([...parsed.headers]);
+      
+      const N = parsed.rows.length;
+      const defaultStart = Math.round(N * 0.2);
+      setDataRangeStart(defaultStart);
+      setDataRangeEnd(N);
+      
       setAnalysisResults(null);
       setAiduTab('describe');
     };
-    reader.readAsText(file, 'UTF-8');
+    reader.readAsArrayBuffer(file);
   };
 
   const performAnalysis = () => {
@@ -452,16 +511,22 @@ export default function ExamPanel({
     const { headers, rows } = uploadedFiles[activeFilename];
     if (rows.length === 0) return;
     
+    const activeRows = rows.slice(dataRangeStart, dataRangeEnd);
+    if (activeRows.length === 0) {
+      alert('분석할 데이터 범위에 행이 존재하지 않습니다.');
+      return;
+    }
+    
     const results = {};
     
     // Determine overall stats
-    const totalObs = rows.length;
+    const totalObs = activeRows.length;
     const totalVars = headers.length;
     let totalMissing = 0;
     
     // Find column data types and calculate column stats
     selectedColumns.forEach(col => {
-      const values = rows.map(r => r[col]);
+      const values = activeRows.map(r => r[col]);
       
       // Check column type (numeric if >= 90% parseable as numbers, ignoring blanks)
       const nonBlankVals = values.filter(v => v !== null && v !== undefined && v !== '');
@@ -615,10 +680,10 @@ export default function ExamPanel({
     const missingCellRatio = ((totalMissing / (totalObs * totalVars)) * 100).toFixed(2) + '%';
     
     // Calculate duplicated rows
-    const serializedRows = rows.map(r => JSON.stringify(r));
+    const serializedRows = activeRows.map(r => JSON.stringify(r));
     const uniqueSerializedRows = new Set(serializedRows);
-    const duplicatedRowsCount = rows.length - uniqueSerializedRows.size;
-    const duplicatedRowsRatio = ((duplicatedRowsCount / rows.length) * 100).toFixed(2) + '%';
+    const duplicatedRowsCount = activeRows.length - uniqueSerializedRows.size;
+    const duplicatedRowsRatio = ((duplicatedRowsCount / activeRows.length) * 100).toFixed(2) + '%';
     
     const overallStats = {
       num_of_obs: totalObs,
@@ -679,7 +744,14 @@ export default function ExamPanel({
                     style={{ padding: '0.2rem 0.5rem', fontSize: '0.75rem' }}
                     onClick={() => {
                       setActiveFilename(name);
-                      setSelectedColumns([]);
+                      const file = uploadedFiles[name];
+                      if (file) {
+                        setSelectedColumns([...file.headers]);
+                        const N = file.rows.length;
+                        const defaultStart = Math.round(N * 0.2);
+                        setDataRangeStart(defaultStart);
+                        setDataRangeEnd(N);
+                      }
                       setAnalysisResults(null);
                       setAiduTab('describe');
                     }}
@@ -710,8 +782,16 @@ export default function ExamPanel({
               style={{ fontSize: '0.8rem', padding: '0.4rem' }}
               value={activeFilename}
               onChange={(e) => {
-                setActiveFilename(e.target.value);
-                setSelectedColumns([]);
+                const fname = e.target.value;
+                setActiveFilename(fname);
+                const file = uploadedFiles[fname];
+                if (file) {
+                  setSelectedColumns([...file.headers]);
+                  const N = file.rows.length;
+                  const defaultStart = Math.round(N * 0.2);
+                  setDataRangeStart(defaultStart);
+                  setDataRangeEnd(N);
+                }
                 setAnalysisResults(null);
               }}
             >
@@ -723,18 +803,55 @@ export default function ExamPanel({
 
           <div className="form-group">
             <label style={{ fontSize: '0.8rem', fontWeight: 'bold' }}>데이터 범위</label>
+            <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.4rem' }}>
+              <div style={{ flex: 1 }}>
+                <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)', display: 'block', marginBottom: '0.15rem' }}>시작행</span>
+                <input 
+                  type="number" 
+                  className="form-control"
+                  style={{ fontSize: '0.75rem', padding: '0.2rem 0.4rem', width: '100%', height: '28px' }}
+                  min="0"
+                  max={dataRangeEnd}
+                  value={dataRangeStart}
+                  onChange={(e) => {
+                    const val = Math.min(Math.max(0, Number(e.target.value)), dataRangeEnd);
+                    setDataRangeStart(val);
+                  }}
+                />
+              </div>
+              <div style={{ flex: 1 }}>
+                <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)', display: 'block', marginBottom: '0.15rem' }}>종료행</span>
+                <input 
+                  type="number" 
+                  className="form-control"
+                  style={{ fontSize: '0.75rem', padding: '0.2rem 0.4rem', width: '100%', height: '28px' }}
+                  min={dataRangeStart}
+                  max={fileData.rows.length}
+                  value={dataRangeEnd}
+                  onChange={(e) => {
+                    const val = Math.max(dataRangeStart, Math.min(Number(e.target.value), fileData.rows.length));
+                    setDataRangeEnd(val);
+                  }}
+                />
+              </div>
+            </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
               <input 
                 type="range" 
                 min="0" 
                 max={fileData.rows.length} 
-                value={fileData.rows.length}
-                disabled 
-                style={{ width: '100%' }}
+                value={dataRangeStart}
+                onChange={(e) => {
+                  const val = Number(e.target.value);
+                  if (val <= dataRangeEnd) {
+                    setDataRangeStart(val);
+                  }
+                }}
+                style={{ width: '100%', cursor: 'pointer' }}
               />
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.7rem', color: 'var(--text-muted)' }}>
-                <span>0</span>
-                <span>{fileData.rows.length}</span>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.65rem', color: 'var(--text-muted)' }}>
+                <span>시작: {dataRangeStart}</span>
+                <span>끝: {dataRangeEnd}</span>
               </div>
             </div>
           </div>
@@ -1088,8 +1205,13 @@ export default function ExamPanel({
           <div className="aidu-topbar-left">
             <span className="aidu-logo">AIDU</span>
             <button type="button" className="aidu-topbar-btn" onClick={() => {
-              if (activeFilename) {
-                setSelectedColumns([]);
+              if (activeFilename && uploadedFiles[activeFilename]) {
+                const file = uploadedFiles[activeFilename];
+                setSelectedColumns([...file.headers]);
+                const N = file.rows.length;
+                const defaultStart = Math.round(N * 0.2);
+                setDataRangeStart(defaultStart);
+                setDataRangeEnd(N);
                 setAnalysisResults(null);
               }
             }}>
@@ -1101,13 +1223,34 @@ export default function ExamPanel({
               setSelectedColumns([]);
               setAnalysisResults(null);
               setAiduTab('import');
+              setDataRangeStart(0);
+              setDataRangeEnd(0);
             }}>
               데이터 초기화
             </button>
           </div>
-          <span className="aidu-workspace-info">
-            {activeFilename ? `현재 작업데이터: ${activeFilename}` : '현재 작업공간: New_Workspace_AICE_Basic'}
-          </span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+            <button 
+              type="button" 
+              className="aidu-topbar-btn" 
+              onClick={() => setRightPanelCollapsed(!rightPanelCollapsed)}
+              style={{
+                backgroundColor: 'rgba(255, 255, 255, 0.15)',
+                border: '1px solid rgba(255, 255, 255, 0.3)',
+                padding: '0.2rem 0.5rem',
+                borderRadius: '4px',
+                fontWeight: 'bold',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.25rem'
+              }}
+            >
+              {rightPanelCollapsed ? '문제 보기 ◀' : '문제 접기 ▶'}
+            </button>
+            <span className="aidu-workspace-info">
+              {activeFilename ? `현재 작업데이터: ${activeFilename}` : '현재 작업공간: New_Workspace_AICE_Basic'}
+            </span>
+          </div>
         </div>
 
         {/* Workspace Body */}
@@ -1187,7 +1330,7 @@ export default function ExamPanel({
       </header>
 
       {/* Main Layout Grid */}
-      <main className={`main-layout ${isDataAnalysisQuestion ? 'split-layout-active' : ''}`}>
+      <main className={`main-layout ${isDataAnalysisQuestion ? 'split-layout-active' : ''} ${rightPanelCollapsed && isDataAnalysisQuestion ? 'right-panel-collapsed' : ''}`}>
         {isDataAnalysisQuestion ? (
           // ==========================================
           // DUAL-PANE SPLIT LAYOUT (AIDU + Quiz)
@@ -1199,7 +1342,8 @@ export default function ExamPanel({
             </section>
 
             {/* Right Pane: Quiz Card & Grid */}
-            <section className="quiz-panel-right">
+            {!rightPanelCollapsed && (
+              <section className="quiz-panel-right">
               {/* Timer Bar */}
               {(attempt.Exam?.timeMode === 'total' || attempt.Exam?.timeMode === 'per-question') && (
                 <div className="timer-container" style={{ marginBottom: 0 }}>
@@ -1341,6 +1485,7 @@ export default function ExamPanel({
                 </div>
               </div>
             </section>
+            )}
           </>
         ) : (
           // ==========================================
