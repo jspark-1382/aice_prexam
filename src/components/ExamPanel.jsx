@@ -59,7 +59,7 @@ export default function ExamPanel({
   const countdownTimerRef = useRef(null);
 
   const activeQuestion = questions[currentIdx] || null;
-  const hasAiduData = !!activeQuestion?.csvData;
+  const hasAiduData = !!attempt.Exam?.csvData;
 
   // Initialize answers from props
   useEffect(() => {
@@ -151,29 +151,32 @@ export default function ExamPanel({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [answers, timeLeft, timeLeftMap, timeTakenMap]);
 
-  // Preload CSV dataset if present on activeQuestion
+  // Preload CSV dataset if present on Exam
   useEffect(() => {
-    if (activeQuestion && activeQuestion.csvData) {
-      const filename = activeQuestion.csvFilename || 'question_data.csv';
-      const parsed = parseCsvData(activeQuestion.csvData);
-      setTimeout(() => {
-        setUploadedFiles(prev => ({
-          ...prev,
-          [filename]: parsed
-        }));
-        setActiveFilename(filename);
-        setSelectedColumns([...parsed.headers]);
-        
-        const N = parsed.rows.length;
-        const defaultStart = Math.round(N * 0.2);
-        setDataRangeStart(defaultStart);
-        setDataRangeEnd(N);
-        
-        setAnalysisResults(null);
-        setAiduTab('describe'); // Open 기초정보분석
-      }, 0);
+    if (attempt.Exam && attempt.Exam.csvData) {
+      const filename = attempt.Exam.csvFilename || 'exam_data.csv';
+      if (!uploadedFiles[filename]) {
+        const parsed = parseCsvData(attempt.Exam.csvData);
+        setTimeout(() => {
+          setUploadedFiles(prev => ({
+            ...prev,
+            [filename]: parsed
+          }));
+          setActiveFilename(filename);
+          setSelectedColumns([...parsed.headers]);
+          
+          const N = parsed.rows.length;
+          const defaultStart = Math.round(N * 0.2);
+          setDataRangeStart(defaultStart);
+          setDataRangeEnd(N);
+          
+          setAnalysisResults(null);
+          setAiduTab('describe'); // Open 기초정보분석
+        }, 0);
+      }
     }
-  }, [currentIdx, activeQuestion]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [attempt]);
 
   // Auto-save answers when user selects/inputs an answer
   const handleAnswerChange = async (questionId, value) => {
@@ -2264,7 +2267,7 @@ export default function ExamPanel({
           <div className="header-left">
             <div className="logo-icon">A</div>
             <div className="logo-text">
-              <h1>AICE Basic 모의고사</h1>
+              <h1>{attempt.Exam?.name || 'AICE Basic 모의고사'}</h1>
               <span>수험자: {user.displayName}</span>
             </div>
           </div>

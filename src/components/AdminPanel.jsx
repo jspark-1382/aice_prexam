@@ -35,8 +35,6 @@ export default function AdminPanel({ onExit }) {
   const [qExplanation, setQExplanation] = useState('');
   const [qTimeLimit, setQTimeLimit] = useState(120); // default 2 minutes
   const [qReference, setQReference] = useState('');
-  const [qCsvData, setQCsvData] = useState('');
-  const [qCsvFilename, setQCsvFilename] = useState('');
 
   // CSV/JSON drag and drop state
   const [isDragOver, setIsDragOver] = useState(false);
@@ -231,7 +229,7 @@ export default function AdminPanel({ onExit }) {
     }
   };
 
-  const handleTimerSettingsChange = async (fields) => {
+  const handleExamSettingsChange = async (fields) => {
     if (!selectedExamId) return;
     setIsSyncing(true);
     try {
@@ -290,8 +288,6 @@ export default function AdminPanel({ onExit }) {
     setQExplanation('');
     setQTimeLimit(120);
     setQReference('');
-    setQCsvData('');
-    setQCsvFilename('');
     
     // Set next qNumber
     if (questions && questions.length > 0) {
@@ -322,9 +318,7 @@ export default function AdminPanel({ onExit }) {
       type: qType,
       explanation: qExplanation.trim(),
       timeLimit: qTimeLimit,
-      reference: qReference.trim() || null,
-      csvData: qCsvData || null,
-      csvFilename: qCsvFilename || null
+      reference: qReference.trim() || null
     };
 
     if (qType === 'multiple-choice') {
@@ -394,8 +388,6 @@ export default function AdminPanel({ onExit }) {
     setQExplanation(q.explanation || '');
     setQTimeLimit(q.timeLimit || 0);
     setQReference(q.reference || '');
-    setQCsvData(q.csvData || '');
-    setQCsvFilename(q.csvFilename || '');
 
     if (q.type === 'multiple-choice') {
       setQOptions(q.options || ['', '', '', '']);
@@ -806,31 +798,106 @@ export default function AdminPanel({ onExit }) {
               </div>
 
               {activeExam && (
-                <div className="form-group">
-                  <label>타이머 모드 설정</label>
-                  <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-                    <select
-                      className="form-control"
-                      value={activeExam.timeMode}
-                      onChange={(e) => handleTimerSettingsChange({ timeMode: e.target.value })}
-                    >
-                      <option value="total">전체 제한 시간</option>
-                      <option value="per-question">문항별 제한 시간</option>
-                      <option value="none">제한시간 없음</option>
-                    </select>
+                <div style={{ display: 'flex', gap: '1.5rem', flexWrap: 'wrap', marginTop: '0.5rem' }}>
+                  {/* Timer settings */}
+                  <div className="form-group" style={{ flex: '1 1 250px', marginBottom: 0 }}>
+                    <label style={{ fontWeight: 'bold' }}>타이머 모드 설정</label>
+                    <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                      <select
+                        className="form-control"
+                        value={activeExam.timeMode}
+                        onChange={(e) => handleExamSettingsChange({ timeMode: e.target.value })}
+                      >
+                        <option value="total">전체 제한 시간</option>
+                        <option value="per-question">문항별 제한 시간</option>
+                        <option value="none">제한시간 없음</option>
+                      </select>
 
-                    {activeExam.timeMode === 'total' && (
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
-                        <input
-                          type="number"
-                          className="form-control"
-                          style={{ width: '80px' }}
-                          value={activeExam.totalTimeLimit}
-                          onChange={(e) => handleTimerSettingsChange({ totalTimeLimit: parseInt(e.target.value) || 0 })}
-                        />
-                        <span style={{ fontSize: '0.9rem', whiteSpace: 'nowrap' }}>분</span>
-                      </div>
-                    )}
+                      {activeExam.timeMode === 'total' && (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+                          <input
+                            type="number"
+                            className="form-control"
+                            style={{ width: '80px' }}
+                            value={activeExam.totalTimeLimit}
+                            onChange={(e) => handleExamSettingsChange({ totalTimeLimit: parseInt(e.target.value) || 0 })}
+                          />
+                          <span style={{ fontSize: '0.9rem', whiteSpace: 'nowrap' }}>분</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Exam-level CSV Upload */}
+                  <div className="form-group" style={{ flex: '2 1 400px', marginBottom: 0 }}>
+                    <label style={{ fontWeight: 'bold' }}>시험지 전체 공유용 CSV 데이터셋 첨부 (선택)</label>
+                    <div style={{ display: 'flex', gap: '1rem', alignItems: 'center', marginTop: '0.25rem' }}>
+                      <input 
+                        type="file" 
+                        id="exam-csv-file-input"
+                        accept=".csv"
+                        style={{ display: 'none' }}
+                        onChange={(e) => {
+                          const file = e.target.files[0];
+                          if (!file) return;
+                          const reader = new FileReader();
+                          reader.onload = (evt) => {
+                            const arrayBuffer = evt.target.result;
+                            let text;
+                            try {
+                              const utf8Decoder = new TextDecoder('utf-8', { fatal: true });
+                              text = utf8Decoder.decode(arrayBuffer);
+                            } catch {
+                              try {
+                                const eucKrDecoder = new TextDecoder('euc-kr');
+                                text = eucKrDecoder.decode(arrayBuffer);
+                              } catch {
+                                alert('파일 인코딩 오류가 발생했습니다.');
+                                return;
+                              }
+                            }
+                            handleExamSettingsChange({
+                              csvData: text,
+                              csvFilename: file.name
+                            });
+                          };
+                          reader.readAsArrayBuffer(file);
+                        }}
+                      />
+                      <button 
+                        type="button" 
+                        className="btn btn-secondary"
+                        style={{ fontSize: '0.8rem', padding: '0.4rem 0.8rem' }}
+                        onClick={() => document.getElementById('exam-csv-file-input').click()}
+                      >
+                        <UploadCloud size={14} style={{ marginRight: '4px', verticalAlign: 'middle' }} /> CSV 파일 선택
+                      </button>
+                      {activeExam.csvFilename ? (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.8rem' }}>
+                          <span style={{ fontWeight: 'bold', color: 'var(--primary)' }}>{activeExam.csvFilename}</span>
+                          <span style={{ color: 'var(--text-muted)' }}>({(activeExam.csvData || '').split('\n').length - 1}행)</span>
+                          <button 
+                            type="button" 
+                            className="btn-text-action" 
+                            style={{ color: 'var(--danger)', fontSize: '0.8rem', marginLeft: '0.5rem' }}
+                            onClick={() => {
+                              if (confirm('정말로 첨부된 CSV 데이터셋을 삭제하시겠습니까?')) {
+                                handleExamSettingsChange({
+                                  csvData: null,
+                                  csvFilename: null
+                                });
+                                const fileInput = document.getElementById('exam-csv-file-input');
+                                if (fileInput) fileInput.value = '';
+                              }
+                            }}
+                          >
+                            삭제
+                          </button>
+                        </div>
+                      ) : (
+                        <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>첨부된 CSV 데이터셋이 없습니다. (이 시험은 일반 문제 전용)</span>
+                      )}
+                    </div>
                   </div>
                 </div>
               )}
@@ -915,71 +982,6 @@ export default function AdminPanel({ onExit }) {
                     value={qReference}
                     onChange={(e) => setQReference(e.target.value)}
                   />
-                </div>
-
-                <div className="form-group">
-                  <label style={{ fontWeight: 'bold' }}>데이터 분석용 CSV 파일 첨부 (선택)</label>
-                  <div style={{ display: 'flex', gap: '1rem', alignItems: 'center', marginTop: '0.25rem' }}>
-                    <input 
-                      type="file" 
-                      id="q-csv-file-input"
-                      accept=".csv"
-                      style={{ display: 'none' }}
-                      onChange={(e) => {
-                        const file = e.target.files[0];
-                        if (!file) return;
-                        const reader = new FileReader();
-                        reader.onload = (evt) => {
-                          const arrayBuffer = evt.target.result;
-                          let text;
-                          try {
-                            const utf8Decoder = new TextDecoder('utf-8', { fatal: true });
-                            text = utf8Decoder.decode(arrayBuffer);
-                          } catch {
-                            try {
-                              const eucKrDecoder = new TextDecoder('euc-kr');
-                              text = eucKrDecoder.decode(arrayBuffer);
-                            } catch {
-                              alert('파일 인코딩 오류가 발생했습니다.');
-                              return;
-                            }
-                          }
-                          setQCsvData(text);
-                          setQCsvFilename(file.name);
-                        };
-                        reader.readAsArrayBuffer(file);
-                      }}
-                    />
-                    <button 
-                      type="button" 
-                      className="btn btn-secondary"
-                      style={{ fontSize: '0.8rem', padding: '0.4rem 0.8rem' }}
-                      onClick={() => document.getElementById('q-csv-file-input').click()}
-                    >
-                      <UploadCloud size={14} style={{ marginRight: '4px', verticalAlign: 'middle' }} /> CSV 파일 선택
-                    </button>
-                    {qCsvFilename ? (
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.8rem' }}>
-                        <span style={{ fontWeight: 'bold', color: 'var(--primary)' }}>{qCsvFilename}</span>
-                        <span style={{ color: 'var(--text-muted)' }}>({qCsvData.split('\n').length - 1}행)</span>
-                        <button 
-                          type="button" 
-                          className="btn-text-action" 
-                          style={{ color: 'var(--danger)', fontSize: '0.8rem', marginLeft: '0.5rem' }}
-                          onClick={() => {
-                            setQCsvData('');
-                            setQCsvFilename('');
-                            const fileInput = document.getElementById('q-csv-file-input');
-                            if (fileInput) fileInput.value = '';
-                          }}
-                        >
-                          삭제
-                        </button>
-                      </div>
-                    ) : (
-                      <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>첨부된 CSV 데이터가 없습니다. (분석 기능 미사용)</span>
-                    )}
-                  </div>
                 </div>
 
                 {/* MCQ details */}

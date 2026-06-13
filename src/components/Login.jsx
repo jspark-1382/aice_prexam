@@ -60,7 +60,7 @@ export default function Login({ exams, onLoginSuccess, onAdminLogin, theme, togg
         // 2. Check if they have an active or completed attempt
         const { data: attempts, error: attemptError } = await supabase
           .from('QuizAttempt')
-          .select('*, Exam(name)')
+          .select('*, Exam(*)')
           .eq('user', foundUser.id)
           .order('id', { ascending: false });
 
@@ -119,7 +119,7 @@ export default function Login({ exams, onLoginSuccess, onAdminLogin, theme, togg
           timeLeft: selectedExam?.totalTimeLimit ? selectedExam.totalTimeLimit * 60 : null,
           timeLeftMapJson: isPerQuestion ? '{}' : null
         }])
-        .select()
+        .select('*, Exam(*)')
         .single();
 
       if (attemptError) throw attemptError;
