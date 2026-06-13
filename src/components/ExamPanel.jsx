@@ -352,6 +352,66 @@ export default function ExamPanel({
     }
   }
 
+  const handleAutoFillCorrectAnswers = async () => {
+    if (!window.confirm('모든 문항의 정답을 자동으로 입력하시겠습니까? (테스트용)')) return;
+    
+    setSyncStatus('정답 자동 입력 중...');
+    const updatedAnswers = { ...answers };
+    
+    try {
+      for (const q of questions) {
+        let correctValue = '';
+        if (q.type === 'multiple-choice') {
+          correctValue = q.correctAnswerIndex !== null ? q.correctAnswerIndex.toString() : '';
+        } else {
+          correctValue = q.correctAnswers && q.correctAnswers.length > 0 ? q.correctAnswers[0] : '';
+        }
+        
+        updatedAnswers[q.id] = correctValue;
+        
+        // Save to DB
+        const isCorrect = true;
+        const { data: existing, error: queryError } = await supabase
+          .from('UserAnswer')
+          .select('id')
+          .eq('attempt', attempt.id)
+          .eq('question', q.id);
+
+        if (queryError) throw queryError;
+
+        if (existing && existing.length > 0) {
+          const { error: updateError } = await supabase
+            .from('UserAnswer')
+            .update({
+              userSelectedAnswer: correctValue,
+              isCorrect: isCorrect,
+              timeTaken: timeTakenMap[q.id] || 0
+            })
+            .eq('id', existing[0].id);
+          if (updateError) throw updateError;
+        } else {
+          const { error: insertError } = await supabase
+            .from('UserAnswer')
+            .insert([{
+              attempt: attempt.id,
+              question: q.id,
+              userSelectedAnswer: correctValue,
+              isCorrect: isCorrect,
+              timeTaken: 0
+            }]);
+          if (insertError) throw insertError;
+        }
+      }
+      
+      setAnswers(updatedAnswers);
+      setSyncStatus('정답 입력 완료');
+      alert('모든 정답이 자동으로 입력되었습니다.');
+    } catch (e) {
+      console.error(e);
+      alert('정답 입력 중 오류 발생: ' + e.message);
+    }
+  };
+
   // Mini custom markdown renderer
   const renderContext = (text) => {
     if (!text) return null;
@@ -2278,6 +2338,14 @@ export default function ExamPanel({
                 <div className="progress-bar" style={{ width: `${progressPercent}%` }}></div>
               </div>
             </div>
+            <button 
+              type="button" 
+              className="btn btn-secondary" 
+              onClick={handleAutoFillCorrectAnswers} 
+              style={{ padding: '0.4rem 0.8rem', fontSize: '0.85rem', marginRight: '0.5rem', backgroundColor: 'var(--success)', border: 'none', color: '#fff' }}
+            >
+              정답 자동 입력 (테스트)
+            </button>
             <button type="button" className="btn btn-secondary" onClick={onLogout} style={{ padding: '0.4rem 0.8rem', fontSize: '0.85rem' }}>
               로그아웃
             </button>

@@ -54,9 +54,27 @@ export default function AdminPanel({ onExit }) {
         .order('id', { ascending: true });
 
       if (error) throw error;
-      setExams(data || []);
-      if (data && data.length > 0) {
-        setSelectedExamId(data[0].id.toString());
+      
+      const updatedExams = (data || []).map(exam => {
+        const localCsv = localStorage.getItem(`exam_csv_${exam.id}`);
+        if (localCsv) {
+          try {
+            const { csvData, csvFilename } = JSON.parse(localCsv);
+            return {
+              ...exam,
+              csvData: csvData !== undefined ? csvData : exam.csvData,
+              csvFilename: csvFilename !== undefined ? csvFilename : exam.csvFilename
+            };
+          } catch (e) {
+            console.error('Error parsing local CSV settings override:', e);
+          }
+        }
+        return exam;
+      });
+
+      setExams(updatedExams);
+      if (updatedExams && updatedExams.length > 0) {
+        setSelectedExamId(updatedExams[0].id.toString());
       }
     } catch (e) {
       console.error(e);
@@ -233,6 +251,10 @@ export default function AdminPanel({ onExit }) {
     if (!selectedExamId) return;
     setIsSyncing(true);
     try {
+      const hasCsvData = 'csvData' in fields;
+      const hasCsvFilename = 'csvFilename' in fields;
+
+      // Try updating remote db first
       const { data, error } = await supabase
         .from('Exam')
         .update({
@@ -243,8 +265,64 @@ export default function AdminPanel({ onExit }) {
         .select()
         .single();
 
-      if (error) throw error;
-      setExams(exams.map(ex => ex.id === data.id ? data : ex));
+      if (error) {
+        const errorMsg = error.message || '';
+        // If csvData column does not exist in schema cache, handle fallback
+        if (errorMsg.includes('csvData') || errorMsg.includes('column')) {
+          console.warn('Supabase DB lacks csvData/csvFilename columns, using localStorage fallback');
+          
+          if (hasCsvData || hasCsvFilename) {
+            const localCsv = localStorage.getItem(`exam_csv_${selectedExamId}`);
+            let csvFields = {};
+            if (localCsv) {
+              try {
+                csvFields = JSON.parse(localCsv);
+              } catch {
+                console.warn('Failed to parse local CSV data from localStorage');
+              }
+            }
+            if (hasCsvData) csvFields.csvData = fields.csvData;
+            if (hasCsvFilename) csvFields.csvFilename = fields.csvFilename;
+            localStorage.setItem(`exam_csv_${selectedExamId}`, JSON.stringify(csvFields));
+          }
+
+          // Retry with ONLY remote-supported fields
+          const remoteFields = { ...fields };
+          delete remoteFields.csvData;
+          delete remoteFields.csvFilename;
+
+          const { data: retryData, error: retryError } = await supabase
+            .from('Exam')
+            .update({
+              ...remoteFields,
+              updatedAt: Date.now()
+            })
+            .eq('id', parseInt(selectedExamId))
+            .select()
+            .single();
+
+          if (retryError) throw retryError;
+
+          const mergedData = {
+            ...retryData,
+            csvData: fields.csvData !== undefined ? fields.csvData : (JSON.parse(localStorage.getItem(`exam_csv_${selectedExamId}`) || '{}').csvData || null),
+            csvFilename: fields.csvFilename !== undefined ? fields.csvFilename : (JSON.parse(localStorage.getItem(`exam_csv_${selectedExamId}`) || '{}').csvFilename || null)
+          };
+
+          setExams(exams.map(ex => ex.id === mergedData.id ? mergedData : ex));
+        } else {
+          throw error;
+        }
+      } else {
+        setExams(exams.map(ex => ex.id === data.id ? data : ex));
+        if (hasCsvData || hasCsvFilename) {
+          const csvFields = {
+            csvData: data.csvData,
+            csvFilename: data.csvFilename
+          };
+          localStorage.setItem(`exam_csv_${selectedExamId}`, JSON.stringify(csvFields));
+        }
+      }
     } catch (err) {
       console.error(err);
       alert('시간 설정 반영 오류: ' + err.message);

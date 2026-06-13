@@ -27,7 +27,25 @@ export default function App() {
         .order('id', { ascending: true });
 
       if (error) throw error;
-      setExams(data || []);
+
+      const updatedExams = (data || []).map(exam => {
+        const localCsv = localStorage.getItem(`exam_csv_${exam.id}`);
+        if (localCsv) {
+          try {
+            const { csvData, csvFilename } = JSON.parse(localCsv);
+            return {
+              ...exam,
+              csvData: csvData !== undefined ? csvData : exam.csvData,
+              csvFilename: csvFilename !== undefined ? csvFilename : exam.csvFilename
+            };
+          } catch (e) {
+            console.error('Error parsing local CSV settings override:', e);
+          }
+        }
+        return exam;
+      });
+
+      setExams(updatedExams);
       setSyncStatus('[동기화 완료] Supabase 실시간 DB 연동됨');
     } catch (err) {
       console.error('Error fetching exams on startup:', err);
@@ -76,7 +94,24 @@ export default function App() {
 
   const handleLoginSuccess = async (userRecord, attemptRecord, answersRecord) => {
     setCurrentUser(userRecord);
-    setCurrentAttempt(attemptRecord);
+    
+    let updatedAttempt = { ...attemptRecord };
+    if (updatedAttempt.Exam) {
+      const localCsv = localStorage.getItem(`exam_csv_${updatedAttempt.Exam.id}`);
+      if (localCsv) {
+        try {
+          const { csvData, csvFilename } = JSON.parse(localCsv);
+          updatedAttempt.Exam = {
+            ...updatedAttempt.Exam,
+            csvData: csvData !== undefined ? csvData : updatedAttempt.Exam.csvData,
+            csvFilename: csvFilename !== undefined ? csvFilename : updatedAttempt.Exam.csvFilename
+          };
+        } catch (e) {
+          console.error('Error parsing local CSV settings override:', e);
+        }
+      }
+    }
+    setCurrentAttempt(updatedAttempt);
     setInitialAnswers(answersRecord);
     
     setSyncStatus('시험지 문항 다운로드 중...');
