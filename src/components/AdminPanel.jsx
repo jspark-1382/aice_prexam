@@ -1,8 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { supabase } from '../supabaseClient';
 import { 
   Plus, Edit, Trash2, Download, UploadCloud, RefreshCw, 
-  Settings, CheckCircle, AlertCircle, X, Eye, HelpCircle, ArrowLeft 
+  X, Eye, ArrowLeft 
 } from 'lucide-react';
 
 export default function AdminPanel({ onExit }) {
@@ -35,6 +35,8 @@ export default function AdminPanel({ onExit }) {
   const [qExplanation, setQExplanation] = useState('');
   const [qTimeLimit, setQTimeLimit] = useState(120); // default 2 minutes
   const [qReference, setQReference] = useState('');
+  const [qCsvData, setQCsvData] = useState('');
+  const [qCsvFilename, setQCsvFilename] = useState('');
 
   // CSV/JSON drag and drop state
   const [isDragOver, setIsDragOver] = useState(false);
@@ -45,18 +47,81 @@ export default function AdminPanel({ onExit }) {
   const [studentAnswers, setStudentAnswers] = useState([]);
   const [isAnswersLoading, setIsAnswersLoading] = useState(false);
 
+  async function fetchExams() {
+    setIsLoading(true);
+    try {
+      const { data, error } = await supabase
+        .from('Exam')
+        .select('*')
+        .order('id', { ascending: true });
+
+      if (error) throw error;
+      setExams(data || []);
+      if (data && data.length > 0) {
+        setSelectedExamId(data[0].id.toString());
+      }
+    } catch (e) {
+      console.error(e);
+      alert('시험 목록 로드 실패: ' + e.message);
+    } finally {
+      setIsLoading(false);
+    }
+  }
+
+  async function fetchQuestions(examId) {
+    try {
+      const { data, error } = await supabase
+        .from('QuizQuestion')
+        .select('*')
+        .eq('exam', parseInt(examId))
+        .order('questionNumber', { ascending: true });
+
+      if (error) throw error;
+      setQuestions(data || []);
+      // Set next question number
+      if (data && data.length > 0) {
+        setQNumber(Math.max(...data.map(q => q.questionNumber)) + 1);
+      } else {
+        setQNumber(1);
+      }
+    } catch (e) {
+      console.error(e);
+    }
+  }
+
+  async function fetchAttempts(examId) {
+    try {
+      const { data, error } = await supabase
+        .from('QuizAttempt')
+        .select('*, User(*)')
+        .eq('exam', parseInt(examId))
+        .order('startedAt', { ascending: false });
+
+      if (error) throw error;
+      setAttempts(data || []);
+    } catch (e) {
+      console.error(e);
+    }
+  }
+
   // Load basic details
   useEffect(() => {
-    fetchExams();
+    setTimeout(() => {
+      fetchExams();
+    }, 0);
   }, []);
 
   useEffect(() => {
     if (selectedExamId) {
-      fetchQuestions(selectedExamId);
-      fetchAttempts(selectedExamId);
+      setTimeout(() => {
+        fetchQuestions(selectedExamId);
+        fetchAttempts(selectedExamId);
+      }, 0);
     } else {
-      setQuestions([]);
-      setAttempts([]);
+      setTimeout(() => {
+        setQuestions([]);
+        setAttempts([]);
+      }, 0);
     }
   }, [selectedExamId]);
 
@@ -82,63 +147,6 @@ export default function AdminPanel({ onExit }) {
       supabase.removeChannel(attemptChannel);
     };
   }, [selectedExamId]);
-
-  const fetchExams = async () => {
-    setIsLoading(true);
-    try {
-      const { data, error } = await supabase
-        .from('Exam')
-        .select('*')
-        .order('id', { ascending: true });
-
-      if (error) throw error;
-      setExams(data || []);
-      if (data && data.length > 0) {
-        setSelectedExamId(data[0].id.toString());
-      }
-    } catch (e) {
-      console.error(e);
-      alert('시험 목록 로드 실패: ' + e.message);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const fetchQuestions = async (examId) => {
-    try {
-      const { data, error } = await supabase
-        .from('QuizQuestion')
-        .select('*')
-        .eq('exam', parseInt(examId))
-        .order('questionNumber', { ascending: true });
-
-      if (error) throw error;
-      setQuestions(data || []);
-      // Set next question number
-      if (data && data.length > 0) {
-        setQNumber(Math.max(...data.map(q => q.questionNumber)) + 1);
-      } else {
-        setQNumber(1);
-      }
-    } catch (e) {
-      console.error(e);
-    }
-  };
-
-  const fetchAttempts = async (examId) => {
-    try {
-      const { data, error } = await supabase
-        .from('QuizAttempt')
-        .select('*, User(*)')
-        .eq('exam', parseInt(examId))
-        .order('startedAt', { ascending: false });
-
-      if (error) throw error;
-      setAttempts(data || []);
-    } catch (e) {
-      console.error(e);
-    }
-  };
 
   // Exam Operations
   const handleCreateExam = async (e) => {
@@ -282,6 +290,8 @@ export default function AdminPanel({ onExit }) {
     setQExplanation('');
     setQTimeLimit(120);
     setQReference('');
+    setQCsvData('');
+    setQCsvFilename('');
     
     // Set next qNumber
     if (questions && questions.length > 0) {
@@ -312,7 +322,9 @@ export default function AdminPanel({ onExit }) {
       type: qType,
       explanation: qExplanation.trim(),
       timeLimit: qTimeLimit,
-      reference: qReference.trim() || null
+      reference: qReference.trim() || null,
+      csvData: qCsvData || null,
+      csvFilename: qCsvFilename || null
     };
 
     if (qType === 'multiple-choice') {
@@ -382,6 +394,8 @@ export default function AdminPanel({ onExit }) {
     setQExplanation(q.explanation || '');
     setQTimeLimit(q.timeLimit || 0);
     setQReference(q.reference || '');
+    setQCsvData(q.csvData || '');
+    setQCsvFilename(q.csvFilename || '');
 
     if (q.type === 'multiple-choice') {
       setQOptions(q.options || ['', '', '', '']);
@@ -662,7 +676,7 @@ export default function AdminPanel({ onExit }) {
     try {
       let maxNumber = questions.length > 0 ? Math.max(...questions.map(q => q.questionNumber)) : 0;
       
-      const records = importedList.map((q, idx) => {
+      const records = importedList.map((q) => {
         maxNumber++;
         return {
           exam: parseInt(selectedExamId),
@@ -901,6 +915,71 @@ export default function AdminPanel({ onExit }) {
                     value={qReference}
                     onChange={(e) => setQReference(e.target.value)}
                   />
+                </div>
+
+                <div className="form-group">
+                  <label style={{ fontWeight: 'bold' }}>데이터 분석용 CSV 파일 첨부 (선택)</label>
+                  <div style={{ display: 'flex', gap: '1rem', alignItems: 'center', marginTop: '0.25rem' }}>
+                    <input 
+                      type="file" 
+                      id="q-csv-file-input"
+                      accept=".csv"
+                      style={{ display: 'none' }}
+                      onChange={(e) => {
+                        const file = e.target.files[0];
+                        if (!file) return;
+                        const reader = new FileReader();
+                        reader.onload = (evt) => {
+                          const arrayBuffer = evt.target.result;
+                          let text;
+                          try {
+                            const utf8Decoder = new TextDecoder('utf-8', { fatal: true });
+                            text = utf8Decoder.decode(arrayBuffer);
+                          } catch {
+                            try {
+                              const eucKrDecoder = new TextDecoder('euc-kr');
+                              text = eucKrDecoder.decode(arrayBuffer);
+                            } catch {
+                              alert('파일 인코딩 오류가 발생했습니다.');
+                              return;
+                            }
+                          }
+                          setQCsvData(text);
+                          setQCsvFilename(file.name);
+                        };
+                        reader.readAsArrayBuffer(file);
+                      }}
+                    />
+                    <button 
+                      type="button" 
+                      className="btn btn-secondary"
+                      style={{ fontSize: '0.8rem', padding: '0.4rem 0.8rem' }}
+                      onClick={() => document.getElementById('q-csv-file-input').click()}
+                    >
+                      <UploadCloud size={14} style={{ marginRight: '4px', verticalAlign: 'middle' }} /> CSV 파일 선택
+                    </button>
+                    {qCsvFilename ? (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.8rem' }}>
+                        <span style={{ fontWeight: 'bold', color: 'var(--primary)' }}>{qCsvFilename}</span>
+                        <span style={{ color: 'var(--text-muted)' }}>({qCsvData.split('\n').length - 1}행)</span>
+                        <button 
+                          type="button" 
+                          className="btn-text-action" 
+                          style={{ color: 'var(--danger)', fontSize: '0.8rem', marginLeft: '0.5rem' }}
+                          onClick={() => {
+                            setQCsvData('');
+                            setQCsvFilename('');
+                            const fileInput = document.getElementById('q-csv-file-input');
+                            if (fileInput) fileInput.value = '';
+                          }}
+                        >
+                          삭제
+                        </button>
+                      </div>
+                    ) : (
+                      <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>첨부된 CSV 데이터가 없습니다. (분석 기능 미사용)</span>
+                    )}
+                  </div>
                 </div>
 
                 {/* MCQ details */}
@@ -1275,12 +1354,12 @@ export default function AdminPanel({ onExit }) {
                 </div>
               ) : (
                 <div className="review-list">
-                  {questions.map((q, idx) => {
+                  {questions.map((q) => {
                     const uAns = studentAnswers.find(sa => sa.question === q.id);
                     const isCorrect = uAns ? uAns.isCorrect : false;
 
                     let uText = '미입력';
-                    let cText = '';
+                    let cText;
 
                     if (q.type === 'multiple-choice') {
                       if (uAns && uAns.userSelectedAnswer !== undefined && uAns.userSelectedAnswer !== '') {

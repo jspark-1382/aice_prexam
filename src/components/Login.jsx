@@ -1,6 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { supabase } from '../supabaseClient';
-import { User, Shield, BookOpen, AlertTriangle } from 'lucide-react';
+import { User, Shield, AlertTriangle } from 'lucide-react';
+
+function generateEmail(name) {
+  return `${name}_${Date.now()}@aice.cbt`;
+}
 
 export default function Login({ exams, onLoginSuccess, onAdminLogin, theme, toggleTheme }) {
   const [activeTab, setActiveTab] = useState('student'); // 'student' | 'admin'
@@ -22,7 +26,9 @@ export default function Login({ exams, onLoginSuccess, onAdminLogin, theme, togg
   useEffect(() => {
     if (exams && exams.length > 0) {
       // Set default selected exam
-      setSelectedExamId(exams[0].id.toString());
+      setTimeout(() => {
+        setSelectedExamId(exams[0].id.toString());
+      }, 0);
     }
   }, [exams]);
 
@@ -73,7 +79,7 @@ export default function Login({ exams, onLoginSuccess, onAdminLogin, theme, togg
         }
       } else {
         // 3. User does not exist, create new user and start attempt
-        const email = `${studentName.trim()}_${Date.now()}@aice.cbt`;
+        const email = generateEmail(studentName.trim());
         const { data: newUser, error: createError } = await supabase
           .from('User')
           .insert([{ displayName: studentName.trim(), email }])

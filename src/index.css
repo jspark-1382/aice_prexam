@@ -1627,6 +1627,47 @@ body.dark-theme .aidu-menu-item.active {
   border-left-color: #6366f1;
 }
 
+.aidu-menu-submenu {
+  display: flex;
+  flex-direction: column;
+  background-color: var(--bg-main);
+  padding: 0.25rem 0;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.aidu-menu-subitem {
+  display: flex;
+  align-items: center;
+  padding: 0.5rem 1.25rem 0.5rem 2.25rem;
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: var(--text-muted);
+  background: none;
+  border: none;
+  width: 100%;
+  text-align: left;
+  cursor: pointer;
+  transition: var(--transition);
+}
+
+.aidu-menu-subitem:hover {
+  background-color: var(--bg-card);
+  color: var(--primary);
+}
+
+.aidu-menu-subitem.active {
+  background-color: var(--primary-light);
+  color: var(--primary);
+  border-left: 3px solid var(--primary);
+  padding-left: calc(2.25rem - 3px);
+}
+
+body.dark-theme .aidu-menu-subitem.active {
+  background-color: rgba(99, 102, 241, 0.12);
+  color: #a5b4fc;
+  border-left-color: #6366f1;
+}
+
 .aidu-main-content {
   flex: 1;
   display: flex;

@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { supabase } from '../supabaseClient';
-import { Check, X, ChevronDown, Award, RefreshCw, AlertCircle } from 'lucide-react';
+import { Check, X, ChevronDown, Award, RefreshCw } from 'lucide-react';
 
 export default function ResultsPanel({ 
   attempt, 
@@ -175,14 +175,14 @@ export default function ResultsPanel({
               오답이 존재하지 않습니다. 아주 훌륭합니다!
             </div>
           ) : (
-            filteredQuestions.map((q, idx) => {
+            filteredQuestions.map((q) => {
               const userAns = getQuestionUserAnswer(q.id);
               const isCorrect = userAns ? userAns.isCorrect : false;
               const isExpanded = !!expandedItems[q.id];
 
               // Format answer labels
               let userAnsText = '미입력';
-              let correctAnsText = '';
+              let correctAnsText;
 
               if (q.type === 'multiple-choice') {
                 if (userAns && userAns.userSelectedAnswer !== undefined && userAns.userSelectedAnswer !== '') {

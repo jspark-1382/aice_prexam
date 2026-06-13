@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { supabase } from './supabaseClient';
 import Login from './components/Login';
 import ExamPanel from './components/ExamPanel';
@@ -19,9 +19,27 @@ export default function App() {
   const [theme, setTheme] = useState(localStorage.getItem('theme') || 'light');
   const [syncStatus, setSyncStatus] = useState('Supabase 연결 중...');
 
+  async function fetchExams() {
+    try {
+      const { data, error } = await supabase
+        .from('Exam')
+        .select('*')
+        .order('id', { ascending: true });
+
+      if (error) throw error;
+      setExams(data || []);
+      setSyncStatus('[동기화 완료] Supabase 실시간 DB 연동됨');
+    } catch (err) {
+      console.error('Error fetching exams on startup:', err);
+      setSyncStatus('서버 연결 실패 (로컬 데이터 구동)');
+    }
+  }
+
   // Fetch initial exams list and check theme
   useEffect(() => {
-    fetchExams();
+    setTimeout(() => {
+      fetchExams();
+    }, 0);
     
     // Apply theme
     if (theme === 'dark') {
@@ -49,22 +67,6 @@ export default function App() {
       supabase.removeChannel(examSubscription);
     };
   }, []);
-
-  const fetchExams = async () => {
-    try {
-      const { data, error } = await supabase
-        .from('Exam')
-        .select('*')
-        .order('id', { ascending: true });
-
-      if (error) throw error;
-      setExams(data || []);
-      setSyncStatus('[동기화 완료] Supabase 실시간 DB 연동됨');
-    } catch (err) {
-      console.error('Error fetching exams on startup:', err);
-      setSyncStatus('서버 연결 실패 (로컬 데이터 구동)');
-    }
-  };
 
   const toggleTheme = () => {
     const nextTheme = theme === 'dark' ? 'light' : 'dark';
