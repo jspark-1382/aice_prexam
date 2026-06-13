@@ -33,9 +33,8 @@ export default function ExamPanel({
   const [dataAnalysisExpanded, setDataAnalysisExpanded] = useState(true);
 
   // Visualization States
-  const [vizX, setVizX] = useState('');
-  const [vizY, setVizY] = useState('');
-  const [vizType, setVizType] = useState('scatter'); // 'scatter' | 'correlation'
+  const [vizType, setVizType] = useState('heatmap'); // 'heatmap' | 'scatter' | 'boxplot' | 'distribution' | 'wordcloud'
+  const [vizRenderState, setVizRenderState] = useState(null);
 
   // Preprocessing States
   const [preprocessDropNa, setPreprocessDropNa] = useState(false);
@@ -166,9 +165,13 @@ export default function ExamPanel({
           setSelectedColumns([...parsed.headers]);
           
           const N = parsed.rows.length;
-          const defaultStart = Math.round(N * 0.2);
-          setDataRangeStart(defaultStart);
+          setDataRangeStart(0);
           setDataRangeEnd(N);
+          setVizRenderState({
+            type: 'heatmap',
+            columns: [...parsed.headers],
+            rangeEnd: N
+          });
           
           setAnalysisResults(null);
           setAiduTab('describe'); // Open 기초정보분석
@@ -613,11 +616,14 @@ export default function ExamPanel({
       setSelectedColumns([...parsed.headers]);
       
       const N = parsed.rows.length;
-      const defaultStart = Math.round(N * 0.2);
-      setDataRangeStart(defaultStart);
-      setDataRangeEnd(N);
-      
-      setAnalysisResults(null);
+      setDataRangeStart(0);
+                setDataRangeEnd(N);
+                setVizRenderState({
+                  type: 'heatmap',
+                  columns: [...parsed.headers],
+                  rangeEnd: N
+                });
+                setAnalysisResults(null);
       setAiduTab('describe');
     };
     reader.readAsArrayBuffer(file);
@@ -865,8 +871,7 @@ export default function ExamPanel({
                       if (file) {
                         setSelectedColumns([...file.headers]);
                         const N = file.rows.length;
-                        const defaultStart = Math.round(N * 0.2);
-                        setDataRangeStart(defaultStart);
+                        setDataRangeStart(0);
                         setDataRangeEnd(N);
                       }
                       setAnalysisResults(null);
@@ -905,8 +910,7 @@ export default function ExamPanel({
                 if (file) {
                   setSelectedColumns([...file.headers]);
                   const N = file.rows.length;
-                  const defaultStart = Math.round(N * 0.2);
-                  setDataRangeStart(defaultStart);
+                  setDataRangeStart(0);
                   setDataRangeEnd(N);
                 }
                 setAnalysisResults(null);
@@ -920,56 +924,33 @@ export default function ExamPanel({
 
           <div className="form-group">
             <label style={{ fontSize: '0.8rem', fontWeight: 'bold' }}>데이터 범위</label>
-            <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.4rem' }}>
-              <div style={{ flex: 1 }}>
-                <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)', display: 'block', marginBottom: '0.15rem' }}>시작행</span>
-                <input 
-                  type="number" 
-                  className="form-control"
-                  style={{ fontSize: '0.75rem', padding: '0.2rem 0.4rem', width: '100%', height: '28px' }}
-                  min="0"
-                  max={dataRangeEnd}
-                  value={dataRangeStart}
-                  onChange={(e) => {
-                    const val = Math.min(Math.max(0, Number(e.target.value)), dataRangeEnd);
-                    setDataRangeStart(val);
-                  }}
-                />
-              </div>
-              <div style={{ flex: 1 }}>
-                <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)', display: 'block', marginBottom: '0.15rem' }}>종료행</span>
-                <input 
-                  type="number" 
-                  className="form-control"
-                  style={{ fontSize: '0.75rem', padding: '0.2rem 0.4rem', width: '100%', height: '28px' }}
-                  min={dataRangeStart}
-                  max={fileData.rows.length}
-                  value={dataRangeEnd}
-                  onChange={(e) => {
-                    const val = Math.max(dataRangeStart, Math.min(Number(e.target.value), fileData.rows.length));
-                    setDataRangeEnd(val);
-                  }}
-                />
-              </div>
-            </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.4rem' }}>
+              <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>0</span>
               <input 
                 type="range" 
                 min="0" 
                 max={fileData.rows.length} 
-                value={dataRangeStart}
+                value={dataRangeEnd}
                 onChange={(e) => {
-                  const val = Number(e.target.value);
-                  if (val <= dataRangeEnd) {
-                    setDataRangeStart(val);
-                  }
+                  setDataRangeEnd(Number(e.target.value));
                 }}
-                style={{ width: '100%', cursor: 'pointer' }}
+                style={{ flex: 1, cursor: 'pointer' }}
               />
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.65rem', color: 'var(--text-muted)' }}>
-                <span>시작: {dataRangeStart}</span>
-                <span>끝: {dataRangeEnd}</span>
-              </div>
+              <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{fileData.rows.length.toLocaleString()}</span>
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+              <input 
+                type="number" 
+                className="form-control"
+                style={{ fontSize: '0.75rem', padding: '0.2rem 0.4rem', width: '80px', height: '28px', textAlign: 'right' }}
+                min="0"
+                max={fileData.rows.length}
+                value={dataRangeEnd}
+                onChange={(e) => {
+                  const val = Math.max(0, Math.min(Number(e.target.value), fileData.rows.length));
+                  setDataRangeEnd(val);
+                }}
+              />
             </div>
           </div>
 
@@ -1366,61 +1347,238 @@ export default function ExamPanel({
 
   const renderAiduVisualizeTab = () => {
     if (!activeFilename || !uploadedFiles[activeFilename]) return null;
-    const { headers, rows } = uploadedFiles[activeFilename];
-
-    // Helper: Find numeric columns
-    const numericCols = headers.filter(h => {
-      const nonBlank = rows.map(r => r[h]).filter(v => v !== '');
+    const fileData = uploadedFiles[activeFilename];
+    const { headers } = fileData;
+    
+    // Helper to check numeric column
+    const isNumericColumn = (col) => {
+      const nonBlank = fileData.rows.map(r => r[col]).filter(v => v !== undefined && v !== '');
       if (nonBlank.length === 0) return false;
       return nonBlank.every(v => !isNaN(Number(v)));
-    });
+    };
 
-    const activeX = vizX || numericCols[0] || headers[0] || '';
-    const activeY = vizY || numericCols[1] || headers[1] || '';
+    // Columns lists for type check
+    
+    // Perform viz analysis
+    const handlePerformVizAnalysis = () => {
+      setVizRenderState({
+        type: vizType,
+        columns: [...selectedColumns],
+        rangeEnd: dataRangeEnd
+      });
+    };
 
-    // Calculate correlation heatmap matrix if correlation selected
+    const currentVizType = vizRenderState?.type || 'heatmap';
+    const currentCols = vizRenderState?.columns || [];
+    const currentRangeEnd = vizRenderState?.rangeEnd || fileData.rows.length;
+    const currentSlicedRows = fileData.rows.slice(0, currentRangeEnd);
+
+    // Calculate correlation for selected numeric cols
     const getCorrelationMatrix = () => {
-      const cols = numericCols.slice(0, 5); // Max 5 columns for heat map
+      const cols = currentCols.filter(isNumericColumn);
+      if (cols.length < 2) return null;
       const matrix = [];
-      const N = rows.length;
 
       cols.forEach(c1 => {
         const rowData = { column: c1 };
+        const v1 = currentSlicedRows.map(r => Number(r[c1])).filter(v => !isNaN(v));
+        const mean1 = v1.length ? v1.reduce((a, b) => a + b, 0) / v1.length : 0;
+        
         cols.forEach(c2 => {
-          const v1 = rows.map(r => Number(r[c1])).filter(v => !isNaN(v));
-          const v2 = rows.map(r => Number(r[c2])).filter(v => !isNaN(v));
+          const v2 = currentSlicedRows.map(r => Number(r[c2])).filter(v => !isNaN(v));
+          const mean2 = v2.length ? v2.reduce((a, b) => a + b, 0) / v2.length : 0;
           
-          if (v1.length === 0 || v2.length === 0) {
-            rowData[c2] = 0;
-            return;
-          }
-          const mean1 = v1.reduce((a, b) => a + b, 0) / N;
-          const mean2 = v2.reduce((a, b) => a + b, 0) / N;
-
           let num = 0;
           let den1 = 0;
           let den2 = 0;
-          for (let i = 0; i < N; i++) {
-            const diff1 = Number(rows[i][c1] || 0) - mean1;
-            const diff2 = Number(rows[i][c2] || 0) - mean2;
+          for (let i = 0; i < currentSlicedRows.length; i++) {
+            const val1 = Number(currentSlicedRows[i]?.[c1]);
+            const val2 = Number(currentSlicedRows[i]?.[c2]);
+            if (isNaN(val1) || isNaN(val2)) continue;
+            const diff1 = val1 - mean1;
+            const diff2 = val2 - mean2;
             num += diff1 * diff2;
-            den1 += Math.pow(diff1, 2);
-            den2 += Math.pow(diff2, 2);
+            den1 += diff1 * diff1;
+            den2 += diff2 * diff2;
           }
-          const correlation = den1 && den2 ? num / Math.sqrt(den1 * den2) : 0;
-          rowData[c2] = correlation;
+          const corr = (den1 && den2) ? num / Math.sqrt(den1 * den2) : (c1 === c2 ? 1.0 : 0.0);
+          rowData[c2] = corr;
         });
         matrix.push(rowData);
       });
       return { columns: cols, matrix };
     };
 
-    const corrData = vizType === 'correlation' ? getCorrelationMatrix() : null;
+    const corrData = currentVizType === 'heatmap' ? getCorrelationMatrix() : null;
 
-    // Render Scatter SVG points
+    // Render Heatmap SVG
+    const renderHeatmapSvg = () => {
+      if (!corrData || corrData.columns.length < 2) {
+        return (
+          <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-light)' }}>
+            상관관계를 분석할 수치형 컬럼을 2개 이상 선택해 주세요.
+          </div>
+        );
+      }
+      
+      const cols = corrData.columns;
+      const matrix = corrData.matrix;
+      const numCols = cols.length;
+
+      const svgWidth = 550;
+      const svgHeight = 450;
+      const paddingLeft = 120;
+      const paddingBottom = 80;
+      const paddingTop = 30;
+      const paddingRight = 60;
+      
+      const gridWidth = svgWidth - paddingLeft - paddingRight;
+      const gridHeight = svgHeight - paddingTop - paddingBottom;
+      const cellWidth = gridWidth / numCols;
+      const cellHeight = gridHeight / numCols;
+
+      const getHeatmapColor = (val) => {
+        if (val >= 0) {
+          // Dark burgundy red (#7f1d1d) to beige (#fff7ed)
+          const r = Math.round(255 - (255 - 127) * val);
+          const g = Math.round(247 - (247 - 29) * val);
+          const b = Math.round(237 - (237 - 29) * val);
+          return `rgb(${r}, ${g}, ${b})`;
+        } else {
+          // Dark blue (#1e3a8a) to beige (#fff7ed)
+          const absVal = Math.abs(val);
+          const r = Math.round(255 - (255 - 30) * absVal);
+          const g = Math.round(247 - (247 - 58) * absVal);
+          const b = Math.round(237 - (237 - 138) * absVal);
+          return `rgb(${r}, ${g}, ${b})`;
+        }
+      };
+
+      const cells = [];
+      const labels = [];
+
+      for (let i = 0; i < numCols; i++) {
+        const c1 = cols[i];
+        // Y Axis Labels (bottom to top matching X axis left to right)
+        const yCoord = paddingTop + (numCols - 1 - i) * cellHeight + cellHeight / 2;
+        labels.push(
+          <text 
+            key={`y-${c1}`} 
+            x={paddingLeft - 8} 
+            y={yCoord} 
+            textAnchor="end" 
+            dominantBaseline="middle" 
+            fontSize="9" 
+            fontWeight="500"
+            fill="var(--text-muted)"
+            style={{ maxWidth: '100px', overflow: 'hidden', textOverflow: 'ellipsis' }}
+          >
+            {c1}
+          </text>
+        );
+
+        // X Axis Labels
+        const xCoord = paddingLeft + i * cellWidth + cellWidth / 2;
+        labels.push(
+          <text 
+            key={`x-${c1}`} 
+            x={xCoord} 
+            y={svgHeight - paddingBottom + 15} 
+            textAnchor="middle" 
+            fontSize="9" 
+            fontWeight="500"
+            fill="var(--text-muted)"
+            transform={`rotate(-20 ${xCoord} ${svgHeight - paddingBottom + 15})`}
+          >
+            {c1}
+          </text>
+        );
+
+        for (let j = 0; j < numCols; j++) {
+          const c2 = cols[j];
+          const val = matrix[i][c2];
+          const cellX = paddingLeft + j * cellWidth;
+          const cellY = paddingTop + (numCols - 1 - i) * cellHeight;
+          const color = getHeatmapColor(val);
+          const textColor = Math.abs(val) > 0.55 ? '#ffffff' : 'var(--text-main)';
+
+          cells.push(
+            <g key={`cell-${i}-${j}`}>
+              <rect 
+                x={cellX} 
+                y={cellY} 
+                width={cellWidth - 1} 
+                height={cellHeight - 1} 
+                fill={color} 
+                stroke="rgba(255,255,255,0.05)"
+              />
+              <text 
+                x={cellX + cellWidth / 2} 
+                y={cellY + cellHeight / 2} 
+                textAnchor="middle" 
+                dominantBaseline="middle" 
+                fontSize="9" 
+                fontWeight="bold" 
+                fill={textColor}
+              >
+                {val === 1.0 ? '1' : val.toFixed(3)}
+              </text>
+            </g>
+          );
+        }
+      }
+
+      // Colorbar gradient definition
+      const gradient = (
+        <defs>
+          <linearGradient id="colorbar-grad" x1="0%" y1="0%" x2="0%" y2="100%">
+            <stop offset="0%" stopColor="rgb(127, 29, 29)" />
+            <stop offset="50%" stopColor="rgb(255, 247, 237)" />
+            <stop offset="100%" stopColor="rgb(30, 58, 138)" />
+          </linearGradient>
+        </defs>
+      );
+
+      // Colorbar ticks
+      const colorbarX = svgWidth - paddingRight + 20;
+      const colorbarHeight = gridHeight;
+      const colorbarTicks = [1, 0.5, 0, -0.5, -1].map(t => {
+        const offsetPercent = (1 - t) / 2; // Maps 1 to 0%, 0 to 50%, -1 to 100%
+        const y = paddingTop + offsetPercent * colorbarHeight;
+        return (
+          <g key={`tick-${t}`}>
+            <line x1={colorbarX + 15} y1={y} x2={colorbarX + 20} y2={y} stroke="var(--border-color)" strokeWidth="1" />
+            <text x={colorbarX + 24} y={y} dominantBaseline="middle" fontSize="8" fill="var(--text-muted)">{t}</text>
+          </g>
+        );
+      });
+
+      return (
+        <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '1rem', backgroundColor: 'var(--bg-card)', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
+          <svg width={svgWidth} height={svgHeight}>
+            {gradient}
+            {/* Grid Cells */}
+            {cells}
+            {/* Grid Labels */}
+            {labels}
+            {/* Colorbar */}
+            <rect x={colorbarX} y={paddingTop} width="15" height={colorbarHeight} fill="url(#colorbar-grad)" rx="2" />
+            {colorbarTicks}
+          </svg>
+        </div>
+      );
+    };
+
+    // Render Scatter SVG
     const renderScatterPlot = () => {
-      const xVals = rows.map(r => Number(r[activeX])).filter(v => !isNaN(v));
-      const yVals = rows.map(r => Number(r[activeY])).filter(v => !isNaN(v));
+      const numericSelected = currentCols.filter(isNumericColumn);
+      if (numericSelected.length < 2) return <p style={{ fontSize: '0.85rem', color: 'var(--text-light)' }}>산점도를 그리려면 수치형 변수를 2개 이상 선택해 주세요.</p>;
+      
+      const activeX = numericSelected[0];
+      const activeY = numericSelected[1];
+      const xVals = currentSlicedRows.map(r => Number(r[activeX])).filter(v => !isNaN(v));
+      const yVals = currentSlicedRows.map(r => Number(r[activeY])).filter(v => !isNaN(v));
+      
       if (xVals.length === 0 || yVals.length === 0) return <p style={{ fontSize: '0.85rem', color: 'var(--text-light)' }}>수치형 데이터를 포함하고 있지 않습니다.</p>;
 
       const xMin = Math.min(...xVals);
@@ -1428,11 +1586,11 @@ export default function ExamPanel({
       const yMin = Math.min(...yVals);
       const yMax = Math.max(...yVals);
 
-      const width = 450;
-      const height = 240;
-      const padding = 40;
+      const width = 500;
+      const height = 300;
+      const padding = 50;
 
-      const points = rows.map((r, idx) => {
+      const points = currentSlicedRows.map((r, idx) => {
         const x = Number(r[activeX]);
         const y = Number(r[activeY]);
         if (isNaN(x) || isNaN(y)) return null;
@@ -1441,123 +1599,397 @@ export default function ExamPanel({
         const cy = height - padding - ((y - yMin) / (yMax - yMin || 1)) * (height - 2 * padding);
 
         return <circle key={idx} cx={cx} cy={cy} r="4" fill="var(--primary)" opacity="0.6" />;
-      }).filter(Boolean).slice(0, 100); // Draw top 100 points for responsiveness
+      }).filter(Boolean).slice(0, 150); // Draw top 150 points
 
       return (
-        <svg width="100%" height="240" style={{ border: '1px solid var(--border-color)', borderRadius: '6px', backgroundColor: 'var(--bg-card)' }}>
-          {/* Grid lines */}
-          <line x1={padding} y1={height - padding} x2={width - padding} y2={height - padding} stroke="var(--text-light)" strokeWidth="2" />
-          <line x1={padding} y1={padding} x2={padding} y2={height - padding} stroke="var(--text-light)" strokeWidth="2" />
-          
-          {points}
+        <div style={{ display: 'flex', justifyContent: 'center', padding: '1rem', backgroundColor: 'var(--bg-card)', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
+          <svg width={width} height={height}>
+            {/* Grid lines */}
+            <line x1={padding} y1={height - padding} x2={width - padding} y2={height - padding} stroke="var(--border-color)" strokeWidth="2" />
+            <line x1={padding} y1={padding} x2={padding} y2={height - padding} stroke="var(--border-color)" strokeWidth="2" />
+            
+            {points}
 
-          {/* Labels */}
-          <text x={width / 2} y={height - 5} textAnchor="middle" fontSize="10" fill="var(--text-muted)">{activeX}</text>
-          <text x="12" y={height / 2} textAnchor="middle" fontSize="10" transform={`rotate(-90 12 ${height / 2})`} fill="var(--text-muted)">{activeY}</text>
-          
-          {/* Min/Max values */}
-          <text x={padding} y={height - padding + 15} fontSize="9" fill="var(--text-muted)" textAnchor="middle">{xMin.toFixed(0)}</text>
-          <text x={width - padding} y={height - padding + 15} fontSize="9" fill="var(--text-muted)" textAnchor="middle">{xMax.toFixed(0)}</text>
-          <text x={padding - 5} y={height - padding} fontSize="9" fill="var(--text-muted)" textAnchor="end" dominantBaseline="middle">{yMin.toFixed(0)}</text>
-          <text x={padding - 5} y={padding} fontSize="9" fill="var(--text-muted)" textAnchor="end" dominantBaseline="middle">{yMax.toFixed(0)}</text>
-        </svg>
+            {/* Labels */}
+            <text x={width / 2} y={height - 10} textAnchor="middle" fontSize="10" fontWeight="bold" fill="var(--text-muted)">{activeX}</text>
+            <text x="15" y={height / 2} textAnchor="middle" fontSize="10" fontWeight="bold" transform={`rotate(-90 15 ${height / 2})`} fill="var(--text-muted)">{activeY}</text>
+            
+            {/* Min/Max values */}
+            <text x={padding} y={height - padding + 15} fontSize="9" fill="var(--text-muted)" textAnchor="middle">{xMin.toFixed(1)}</text>
+            <text x={width - padding} y={height - padding + 15} fontSize="9" fill="var(--text-muted)" textAnchor="middle">{xMax.toFixed(1)}</text>
+            <text x={padding - 5} y={height - padding} fontSize="9" fill="var(--text-muted)" textAnchor="end" dominantBaseline="middle">{yMin.toFixed(1)}</text>
+            <text x={padding - 5} y={padding} fontSize="9" fill="var(--text-muted)" textAnchor="end" dominantBaseline="middle">{yMax.toFixed(1)}</text>
+          </svg>
+        </div>
+      );
+    };
+
+    // Render Boxplot SVG
+    const renderBoxPlot = () => {
+      const numericSelected = currentCols.filter(isNumericColumn);
+      if (numericSelected.length < 1) return <p style={{ fontSize: '0.85rem', color: 'var(--text-light)' }}>박스차트를 그리려면 수치형 변수를 1개 이상 선택해 주세요.</p>;
+      
+      const targetCol = numericSelected[0];
+      const vals = currentSlicedRows.map(r => Number(r[targetCol])).filter(v => !isNaN(v)).sort((a,b)=>a-b);
+      
+      if (vals.length === 0) return <p style={{ fontSize: '0.85rem', color: 'var(--text-light)' }}>수치형 데이터가 존재하지 않습니다.</p>;
+
+      const q1 = vals[Math.floor(vals.length * 0.25)];
+      const median = vals[Math.floor(vals.length * 0.5)];
+      const q3 = vals[Math.floor(vals.length * 0.75)];
+      const minVal = vals[0];
+      const maxVal = vals[vals.length - 1];
+
+      const width = 500;
+      const height = 250;
+      const padding = 50;
+
+      // Scale value to X coordinate
+      const scaleX = (val) => {
+        const range = maxVal - minVal || 1;
+        return padding + ((val - minVal) / range) * (width - 2 * padding);
+      };
+
+      const xMin = scaleX(minVal);
+      const xQ1 = scaleX(q1);
+      const xMed = scaleX(median);
+      const xQ3 = scaleX(q3);
+      const xMax = scaleX(maxVal);
+
+      const yMiddle = height / 2;
+      const boxHeight = 80;
+
+      return (
+        <div style={{ display: 'flex', justifyContent: 'center', padding: '1rem', backgroundColor: 'var(--bg-card)', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
+          <svg width={width} height={height}>
+            {/* Title */}
+            <text x={width/2} y={30} textAnchor="middle" fontSize="11" fontWeight="bold" fill="var(--text-main)">{targetCol} 박스차트</text>
+            
+            {/* Whiskers */}
+            <line x1={xMin} y1={yMiddle} x2={xQ1} y2={yMiddle} stroke="var(--primary)" strokeWidth="2" />
+            <line x1={xQ3} y1={yMiddle} x2={xMax} y2={yMiddle} stroke="var(--primary)" strokeWidth="2" />
+            
+            {/* Min & Max lines */}
+            <line x1={xMin} y1={yMiddle - 20} x2={xMin} y2={yMiddle + 20} stroke="var(--primary)" strokeWidth="2" />
+            <line x1={xMax} y1={yMiddle - 20} x2={xMax} y2={yMiddle + 20} stroke="var(--primary)" strokeWidth="2" />
+
+            {/* Box */}
+            <rect x={xQ1} y={yMiddle - boxHeight/2} width={xQ3 - xQ1} height={boxHeight} fill="rgba(79, 70, 229, 0.15)" stroke="var(--primary)" strokeWidth="2" />
+            
+            {/* Median line */}
+            <line x1={xMed} y1={yMiddle - boxHeight/2} x2={xMed} y2={yMiddle + boxHeight/2} stroke="var(--danger)" strokeWidth="3" />
+
+            {/* Scale Ticks */}
+            <line x1={padding} y1={height - 40} x2={width - padding} y2={height - 40} stroke="var(--border-color)" strokeWidth="1" />
+            {[minVal, q1, median, q3, maxVal].map((v, i) => {
+              const xPos = scaleX(v);
+              return (
+                <g key={i}>
+                  <line x1={xPos} y1={height - 40} x2={xPos} y2={height - 35} stroke="var(--border-color)" strokeWidth="1" />
+                  <text x={xPos} y={height - 22} textAnchor="middle" fontSize="8" fill="var(--text-muted)">{v.toFixed(1)}</text>
+                </g>
+              );
+            })}
+          </svg>
+        </div>
+      );
+    };
+
+    // Render Distribution Hist SVG
+    const renderDistributionPlot = () => {
+      const numericSelected = currentCols.filter(isNumericColumn);
+      if (numericSelected.length < 1) return <p style={{ fontSize: '0.85rem', color: 'var(--text-light)' }}>분포차트를 그리려면 수치형 변수를 1개 이상 선택해 주세요.</p>;
+      
+      const targetCol = numericSelected[0];
+      const vals = currentSlicedRows.map(r => Number(r[targetCol])).filter(v => !isNaN(v));
+      if (vals.length === 0) return <p style={{ fontSize: '0.85rem', color: 'var(--text-light)' }}>수치형 데이터가 존재하지 않습니다.</p>;
+
+      const minVal = Math.min(...vals);
+      const maxVal = Math.max(...vals);
+      const range = maxVal - minVal || 1;
+      const numBins = 10;
+      const binWidth = range / numBins;
+
+      const bins = Array(numBins).fill(0);
+      vals.forEach(v => {
+        let binIdx = Math.floor((v - minVal) / binWidth);
+        if (binIdx >= numBins) binIdx = numBins - 1;
+        bins[binIdx]++;
+      });
+
+      const maxCount = Math.max(...bins) || 1;
+
+      const svgWidth = 500;
+      const svgHeight = 250;
+      const padding = 40;
+      const chartWidth = svgWidth - 2 * padding;
+      const chartHeight = svgHeight - 2 * padding;
+      const barWidth = chartWidth / numBins - 4;
+
+      return (
+        <div style={{ display: 'flex', justifyContent: 'center', padding: '1rem', backgroundColor: 'var(--bg-card)', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
+          <svg width={svgWidth} height={svgHeight}>
+            {/* Title */}
+            <text x={svgWidth/2} y={20} textAnchor="middle" fontSize="11" fontWeight="bold" fill="var(--text-main)">{targetCol} 분포 히스토그램 (10 Bins)</text>
+            
+            {/* Axes */}
+            <line x1={padding} y1={svgHeight - padding} x2={svgWidth - padding} y2={svgHeight - padding} stroke="var(--text-light)" strokeWidth="2" />
+            
+            {bins.map((count, i) => {
+              const barHeight = (count / maxCount) * chartHeight;
+              const x = padding + i * (chartWidth / numBins) + 2;
+              const y = svgHeight - padding - barHeight;
+              const binLow = minVal + i * binWidth;
+
+              return (
+                <g key={i}>
+                  <rect x={x} y={y} width={barWidth} height={barHeight} fill="var(--primary)" opacity="0.85" rx="2" />
+                  <text x={x + barWidth/2} y={y - 5} textAnchor="middle" fontSize="8" fill="var(--text-main)">{count}</text>
+                  <text 
+                    x={x + barWidth/2} 
+                    y={svgHeight - padding + 15} 
+                    textAnchor="middle" 
+                    fontSize="7" 
+                    fill="var(--text-muted)"
+                    transform={`rotate(-15 ${x + barWidth/2} ${svgHeight - padding + 15})`}
+                  >
+                    {binLow.toFixed(1)}
+                  </text>
+                </g>
+              );
+            })}
+          </svg>
+        </div>
+      );
+    };
+
+    // Render Wordcloud Grid
+    const renderWordCloud = () => {
+      // Find categorical columns
+      const catCols = currentCols.filter(c => !isNumericColumn(c));
+      const targetCol = catCols[0] || headers[0];
+      
+      const counts = {};
+      currentSlicedRows.forEach(r => {
+        const val = r[targetCol];
+        if (val !== undefined && val !== '') {
+          counts[val] = (counts[val] || 0) + 1;
+        }
+      });
+
+      const sorted = Object.entries(counts).sort((a,b)=>b[1]-a[1]).slice(0, 20);
+      if (sorted.length === 0) return <p style={{ fontSize: '0.85rem', color: 'var(--text-light)' }}>카테고리 데이터가 존재하지 않습니다.</p>;
+
+      const maxCount = sorted[0][1];
+      const colors = ['#4f46e5', '#3b82f6', '#06b6d4', '#10b981', '#f59e0b', '#ef4444', '#ec4899', '#8b5cf6'];
+
+      return (
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '1rem', justifyContent: 'center', alignItems: 'center', padding: '2rem', minHeight: '220px', backgroundColor: 'var(--bg-card)', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
+          {sorted.map(([word, count], i) => {
+            // Size from 12px to 32px
+            const fontSize = 12 + (count / maxCount) * 20;
+            const color = colors[i % colors.length];
+            return (
+              <span key={word} style={{ fontSize: `${fontSize}px`, fontWeight: 'bold', color, margin: '5px', display: 'inline-block', opacity: 0.9 }}>
+                {word}({count})
+              </span>
+            );
+          })}
+        </div>
       );
     };
 
     return (
       <div style={{ display: 'flex', width: '100%', height: '100%', overflow: 'hidden' }}>
+        {/* Left Settings Panel */}
         <div className="aidu-settings-panel">
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+            <h4 style={{ margin: 0, fontWeight: 'bold', fontSize: '0.85rem' }}>시각화 설정</h4>
+          </div>
+
           <div className="form-group">
-            <label style={{ fontSize: '0.8rem', fontWeight: 'bold' }}>차트 유형</label>
-            <select className="form-control" style={{ fontSize: '0.8rem' }} value={vizType} onChange={(e) => setVizType(e.target.value)}>
-              <option value="scatter">산점도 (Scatter Plot)</option>
-              <option value="correlation">상관관계 Heatmap</option>
+            <label style={{ fontSize: '0.8rem', fontWeight: 'bold' }}>작업 데이터 선택</label>
+            <select 
+              className="form-control" 
+              style={{ fontSize: '0.8rem', padding: '0.4rem' }}
+              value={activeFilename}
+              onChange={(e) => {
+                const fname = e.target.value;
+                setActiveFilename(fname);
+                const file = uploadedFiles[fname];
+                if (file) {
+                  setSelectedColumns([...file.headers]);
+                  const N = file.rows.length;
+                  setDataRangeStart(0);
+                  setDataRangeEnd(N);
+                  setVizRenderState({
+                    type: 'heatmap',
+                    columns: [...file.headers],
+                    rangeEnd: N
+                  });
+                }
+              }}
+            >
+              {Object.keys(uploadedFiles).map(name => (
+                <option key={name} value={name}>{name}</option>
+              ))}
             </select>
           </div>
 
-          {vizType === 'scatter' && (
-            <>
-              <div className="form-group">
-                <label style={{ fontSize: '0.8rem', fontWeight: 'bold' }}>X축 변수</label>
-                <select className="form-control" style={{ fontSize: '0.8rem' }} value={activeX} onChange={(e) => setVizX(e.target.value)}>
-                  {headers.map(h => <option key={h} value={h}>{h}</option>)}
-                </select>
-              </div>
+          <div className="form-group">
+            <label style={{ fontSize: '0.8rem', fontWeight: 'bold' }}>데이터 범위</label>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.4rem' }}>
+              <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>0</span>
+              <input 
+                type="range" 
+                min="0" 
+                max={fileData.rows.length} 
+                value={dataRangeEnd}
+                onChange={(e) => {
+                  setDataRangeEnd(Number(e.target.value));
+                }}
+                style={{ flex: 1, cursor: 'pointer' }}
+              />
+              <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{fileData.rows.length.toLocaleString()}</span>
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+              <input 
+                type="number" 
+                className="form-control"
+                style={{ fontSize: '0.75rem', padding: '0.2rem 0.4rem', width: '80px', height: '28px', textAlign: 'right' }}
+                min="0"
+                max={fileData.rows.length}
+                value={dataRangeEnd}
+                onChange={(e) => {
+                  const val = Math.max(0, Math.min(Number(e.target.value), fileData.rows.length));
+                  setDataRangeEnd(val);
+                }}
+              />
+            </div>
+          </div>
 
-              <div className="form-group">
-                <label style={{ fontSize: '0.8rem', fontWeight: 'bold' }}>Y축 변수</label>
-                <select className="form-control" style={{ fontSize: '0.8rem' }} value={activeY} onChange={(e) => setVizY(e.target.value)}>
-                  {headers.map(h => <option key={h} value={h}>{h}</option>)}
-                </select>
-              </div>
-            </>
-          )}
+          <div className="form-group">
+            <label style={{ fontSize: '0.8rem', fontWeight: 'bold' }}>시각화 유형</label>
+            <select 
+              className="form-control" 
+              style={{ fontSize: '0.8rem', padding: '0.4rem' }}
+              value={vizType} 
+              onChange={(e) => setVizType(e.target.value)}
+            >
+              <option value="heatmap">히트맵</option>
+              <option value="scatter">산점도</option>
+              <option value="boxplot">박스차트</option>
+              <option value="distribution">분포차트</option>
+              <option value="wordcloud">워드클라우드</option>
+            </select>
+          </div>
+
+          <div className="form-group" style={{ display: 'flex', flexDirection: 'column', flex: 1 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+              <label style={{ fontSize: '0.8rem', fontWeight: 'bold', margin: 0 }}>컬럼 선택</label>
+              <button 
+                type="button" 
+                className="btn-text-action" 
+                style={{ fontSize: '0.7rem' }}
+                onClick={() => {
+                  if (selectedColumns.length === headers.length) {
+                    setSelectedColumns([]);
+                  } else {
+                    setSelectedColumns([...headers]);
+                  }
+                }}
+              >
+                {selectedColumns.length === headers.length ? '모두 해제' : '모두 선택'}
+              </button>
+            </div>
+            
+            <div className="aidu-column-list" style={{ maxHeight: '180px', overflowY: 'auto' }}>
+              {headers.map(col => {
+                const isSelected = selectedColumns.includes(col);
+                const isNum = isNumericColumn(col);
+                
+                return (
+                  <div 
+                    key={col} 
+                    className={`aidu-column-item ${isSelected ? 'selected' : ''}`}
+                    onClick={() => {
+                      if (isSelected) {
+                        setSelectedColumns(selectedColumns.filter(c => c !== col));
+                      } else {
+                        setSelectedColumns([...selectedColumns, col]);
+                      }
+                    }}
+                  >
+                    <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '140px' }}>{col}</span>
+                    <span className="aidu-column-type">{isNum ? 'int64' : 'object'}</span>
+                  </div>
+                );
+              })}
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: '0.4rem' }}>
+              <span>총 {selectedColumns.length}</span>
+              <span>최대 {headers.length}</span>
+            </div>
+          </div>
+
+          <button 
+            type="button" 
+            className="btn btn-primary btn-full"
+            style={{ fontSize: '0.85rem', padding: '0.6rem' }}
+            onClick={handlePerformVizAnalysis}
+            disabled={selectedColumns.length === 0}
+          >
+            분석하기
+          </button>
         </div>
 
-        <div className="aidu-results-panel">
+        {/* Right Results Panel */}
+        <div className="aidu-results-panel" style={{ overflowY: 'auto' }}>
           <div className="aidu-card">
-            <div className="aidu-card-header">시각화 분석 결과</div>
-            {vizType === 'scatter' ? (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-                  선택한 두 수치형 변수 ({activeX} - {activeY})의 관계 분포를 산점도로 확인합니다.
-                </p>
-                {renderScatterPlot()}
-              </div>
-            ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-                  주요 수치형 컬럼들 간의 피어슨 상관계수(Pearson Correlation)를 그리드로 시각화합니다.
-                </p>
-                {corrData && (
-                  <div style={{ overflowX: 'auto' }}>
-                    <table className="aidu-table" style={{ borderCollapse: 'collapse', textAlign: 'center', fontSize: '0.8rem' }}>
-                      <thead>
-                        <tr>
-                          <th>변수명</th>
-                          {corrData.columns.map(c => <th key={c}>{c}</th>)}
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {corrData.matrix.map((row, idx) => (
-                          <tr key={idx}>
-                            <td style={{ fontWeight: '600', textAlign: 'left', backgroundColor: 'var(--bg-main)' }}>{row.column}</td>
-                            {corrData.columns.map(c => {
-                              const val = row[c];
-                              // Calculate color gradient based on correlation coefficient
-                              let cellBg = 'rgba(255,255,255,0.05)';
-                              if (val > 0) cellBg = `rgba(79, 70, 229, ${val})`; // Blue tones
-                              else if (val < 0) cellBg = `rgba(239, 68, 68, ${Math.abs(val)})`; // Red tones
-                              
-                              return (
-                                <td 
-                                  key={c} 
-                                  style={{ 
-                                    backgroundColor: cellBg, 
-                                    color: Math.abs(val) > 0.5 ? '#ffffff' : 'var(--text-main)',
-                                    fontWeight: 'bold',
-                                    padding: '0.6rem'
-                                  }}
-                                >
-                                  {val.toFixed(2)}
-                                </td>
-                              );
-                            })}
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
-              </div>
-            )}
+            <div className="aidu-card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span>시각화 분석 결과</span>
+              <span style={{ fontSize: '0.75rem', fontWeight: '500', color: 'var(--text-muted)' }}>
+                대상 데이터: {activeFilename}
+              </span>
+            </div>
+            
+            <div style={{ marginTop: '0.5rem' }}>
+              {currentVizType === 'heatmap' && (
+                <div>
+                  <div style={{ fontSize: '0.85rem', fontWeight: 'bold', marginBottom: '0.5rem', color: 'var(--text-muted)' }}>히트맵</div>
+                  {renderHeatmapSvg()}
+                </div>
+              )}
+              {currentVizType === 'scatter' && (
+                <div>
+                  <div style={{ fontSize: '0.85rem', fontWeight: 'bold', marginBottom: '0.5rem', color: 'var(--text-muted)' }}>산점도</div>
+                  {renderScatterPlot()}
+                </div>
+              )}
+              {currentVizType === 'boxplot' && (
+                <div>
+                  <div style={{ fontSize: '0.85rem', fontWeight: 'bold', marginBottom: '0.5rem', color: 'var(--text-muted)' }}>박스차트</div>
+                  {renderBoxPlot()}
+                </div>
+              )}
+              {currentVizType === 'distribution' && (
+                <div>
+                  <div style={{ fontSize: '0.85rem', fontWeight: 'bold', marginBottom: '0.5rem', color: 'var(--text-muted)' }}>분포차트</div>
+                  {renderDistributionPlot()}
+                </div>
+              )}
+              {currentVizType === 'wordcloud' && (
+                <div>
+                  <div style={{ fontSize: '0.85rem', fontWeight: 'bold', marginBottom: '0.5rem', color: 'var(--text-muted)' }}>워드클라우드</div>
+                  {renderWordCloud()}
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </div>
     );
-  };
-
-  const renderAiduUnsupervisedTab = () => {
+  };const renderAiduUnsupervisedTab = () => {
     if (!activeFilename || !uploadedFiles[activeFilename]) return null;
 
     return (
@@ -1683,7 +2115,12 @@ export default function ExamPanel({
         const N = processedRows.length;
         setDataRangeStart(0);
         setDataRangeEnd(N);
-        setAnalysisResults(null);
+        setVizRenderState({
+          type: 'heatmap',
+          columns: [...processedHeaders],
+          rangeEnd: N
+        });
+                setAnalysisResults(null);
         setPreprocessStatus('가공 완료!');
         
         alert(`데이터 가공 성공!\n새로운 데이터셋 [${newFilename}]이 생성되어 로드되었습니다.`);
@@ -2114,9 +2551,13 @@ export default function ExamPanel({
                 const file = uploadedFiles[activeFilename];
                 setSelectedColumns([...file.headers]);
                 const N = file.rows.length;
-                const defaultStart = Math.round(N * 0.2);
-                setDataRangeStart(defaultStart);
+                setDataRangeStart(0);
                 setDataRangeEnd(N);
+                setVizRenderState({
+                  type: 'heatmap',
+                  columns: [...file.headers],
+                  rangeEnd: N
+                });
                 setAnalysisResults(null);
               }
             }}>
@@ -2135,23 +2576,6 @@ export default function ExamPanel({
             </button>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-            <button 
-              type="button" 
-              className="aidu-topbar-btn" 
-              onClick={() => setRightPanelCollapsed(!rightPanelCollapsed)}
-              style={{
-                backgroundColor: 'rgba(255, 255, 255, 0.15)',
-                border: '1px solid rgba(255, 255, 255, 0.3)',
-                padding: '0.2rem 0.5rem',
-                borderRadius: '4px',
-                fontWeight: 'bold',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '0.25rem'
-              }}
-            >
-              {rightPanelCollapsed ? '문제 보기 ◀' : '문제 접기 ▶'}
-            </button>
             <span className="aidu-workspace-info">
               {activeFilename ? `현재 작업데이터: ${activeFilename}` : '현재 작업공간: New_Workspace_AICE_Basic'}
             </span>
@@ -2353,21 +2777,65 @@ export default function ExamPanel({
         </div>
       </header>
 
-      {/* Main Layout Grid */}
-      <main className={`main-layout ${hasAiduData ? 'split-layout-active' : ''} ${rightPanelCollapsed && hasAiduData ? 'right-panel-collapsed' : ''}`}>
+      <main 
+        className="main-layout" 
+        style={hasAiduData ? {
+          display: 'grid',
+          gridTemplateColumns: rightPanelCollapsed ? '1fr 12px' : '1fr 12px 450px',
+          maxWidth: '1650px',
+          margin: '1.5rem auto',
+          padding: '0 1rem',
+          height: 'calc(100vh - 120px)',
+          gap: '0'
+        } : {}}
+      >
         {hasAiduData ? (
           // ==========================================
           // DUAL-PANE SPLIT LAYOUT (AIDU + Quiz)
           // ==========================================
           <>
             {/* Left Pane: AIDU Platform */}
-            <section style={{ overflow: 'hidden' }}>
+            <section style={{ overflow: 'hidden', height: '100%' }}>
               {renderAiduContainer()}
             </section>
 
+            {/* Vertical Collapse handle bar */}
+            <div 
+              onClick={() => setRightPanelCollapsed(!rightPanelCollapsed)}
+              style={{
+                width: '12px',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                backgroundColor: 'var(--bg-main)',
+                borderLeft: '1px solid var(--border-color)',
+                borderRight: '1px solid var(--border-color)',
+                transition: 'background-color 0.2s',
+                zIndex: 100,
+                userSelect: 'none'
+              }}
+              onMouseEnter={(e) => e.target.style.backgroundColor = 'var(--bg-card-hover)'}
+              onMouseLeave={(e) => e.target.style.backgroundColor = 'var(--bg-main)'}
+              className="vertical-collapse-handle"
+            >
+              <div style={{
+                fontSize: '0.55rem',
+                fontWeight: 'bold',
+                color: 'var(--text-muted)',
+                writingMode: 'vertical-rl',
+                textOrientation: 'mixed',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.2rem'
+              }}>
+                {rightPanelCollapsed ? '◀ 문제 보기' : '문제 접기 ▶'}
+              </div>
+            </div>
+
             {/* Right Pane: Quiz Card & Grid */}
             {!rightPanelCollapsed && (
-              <section className="quiz-panel-right">
+              <section className="quiz-panel-right" style={{ overflowY: 'auto', height: '100%', paddingLeft: '12px' }}>
               {/* Timer Bar */}
               {(attempt.Exam?.timeMode === 'total' || attempt.Exam?.timeMode === 'per-question') && (
                 <div className="timer-container" style={{ marginBottom: 0 }}>
