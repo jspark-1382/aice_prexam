@@ -1484,3 +1484,437 @@ body.dark-theme .markdown-desc-box code {
     grid-template-columns: 1fr;
   }
 }
+
+/* ==========================================
+   AIDU Data Analysis Simulation Styling
+   ========================================== */
+.split-layout-active {
+  grid-template-columns: 1fr 450px !important;
+  max-width: 1650px !important;
+  margin: 1.5rem auto !important;
+  padding: 0 1rem !important;
+  height: calc(100vh - 120px);
+}
+
+@media (max-width: 1200px) {
+  .split-layout-active {
+    grid-template-columns: 1fr !important;
+    height: auto;
+  }
+}
+
+.aidu-container {
+  display: flex;
+  flex-direction: column;
+  background-color: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-md);
+  overflow: hidden;
+  height: 720px;
+  animation: fadeIn 0.4s ease;
+}
+
+.aidu-topbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: linear-gradient(135deg, #0b5ed7 0%, #004ecc 100%);
+  color: #ffffff;
+  padding: 0.6rem 1.25rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  border-bottom: 1px solid rgba(0,0,0,0.1);
+  user-select: none;
+}
+
+.aidu-topbar-left {
+  display: flex;
+  align-items: center;
+  gap: 1.25rem;
+}
+
+.aidu-logo {
+  font-size: 1.15rem;
+  font-weight: 900;
+  letter-spacing: 0.05em;
+  background: linear-gradient(90deg, #ffffff 0%, #cce0ff 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.aidu-topbar-btn {
+  background: none;
+  border: none;
+  color: rgba(255, 255, 255, 0.85);
+  font-size: 0.8rem;
+  cursor: pointer;
+  padding: 0.25rem 0.6rem;
+  border-radius: 4px;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-weight: 600;
+}
+
+.aidu-topbar-btn:hover {
+  color: #ffffff;
+  background-color: rgba(255,255,255,0.15);
+}
+
+.aidu-workspace-info {
+  font-size: 0.75rem;
+  color: rgba(255, 255, 255, 0.75);
+  font-family: monospace;
+  background-color: rgba(0,0,0,0.15);
+  padding: 0.25rem 0.5rem;
+  border-radius: 4px;
+}
+
+.aidu-workspace-body {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+}
+
+.aidu-sidebar {
+  width: 180px;
+  background-color: var(--bg-card);
+  border-right: 1px solid var(--border-color);
+  display: flex;
+  flex-direction: column;
+  padding: 1rem 0;
+  gap: 0.25rem;
+  flex-shrink: 0;
+}
+
+.aidu-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.75rem 1.25rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  background: none;
+  border: none;
+  width: 100%;
+  text-align: left;
+  cursor: pointer;
+  transition: var(--transition);
+}
+
+.aidu-menu-item:hover {
+  background-color: var(--bg-main);
+  color: var(--primary);
+}
+
+.aidu-menu-item.active {
+  background-color: var(--primary-light);
+  color: var(--primary);
+  border-left: 4px solid var(--primary);
+  padding-left: calc(1.25rem - 4px);
+}
+
+body.dark-theme .aidu-menu-item.active {
+  background-color: rgba(99, 102, 241, 0.15);
+  color: #a5b4fc;
+  border-left-color: #6366f1;
+}
+
+.aidu-main-content {
+  flex: 1;
+  display: flex;
+  overflow: hidden;
+  background-color: var(--bg-main);
+}
+
+.aidu-settings-panel {
+  width: 250px;
+  background-color: var(--bg-card);
+  border-right: 1px solid var(--border-color);
+  padding: 1.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+  overflow-y: auto;
+  flex-shrink: 0;
+}
+
+.aidu-results-panel {
+  flex: 1;
+  padding: 1.25rem;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.aidu-section-title {
+  font-size: 0.875rem;
+  font-weight: 700;
+  color: var(--text-main);
+  margin-bottom: 0.5rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.aidu-column-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  max-height: 320px;
+  overflow-y: auto;
+  padding-right: 0.25rem;
+}
+
+.aidu-column-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.45rem 0.6rem;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  background-color: var(--bg-card);
+  cursor: pointer;
+  user-select: none;
+  font-size: 0.8rem;
+  transition: var(--transition);
+}
+
+.aidu-column-item:hover {
+  border-color: var(--border-hover);
+  background-color: var(--bg-main);
+}
+
+.aidu-column-item.selected {
+  border-color: var(--primary);
+  background-color: var(--primary-light);
+  color: var(--primary);
+  font-weight: 600;
+}
+
+body.dark-theme .aidu-column-item.selected {
+  background-color: rgba(99, 102, 241, 0.15);
+  border-color: #6366f1;
+  color: #a5b4fc;
+}
+
+.aidu-column-type {
+  font-size: 0.65rem;
+  color: var(--text-muted);
+  background-color: var(--bg-main);
+  padding: 0.1rem 0.35rem;
+  border-radius: 4px;
+  font-family: monospace;
+}
+
+.aidu-column-item.selected .aidu-column-type {
+  background-color: var(--bg-card);
+}
+
+.aidu-card {
+  background-color: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  padding: 1.25rem;
+  box-shadow: var(--shadow-sm);
+}
+
+.aidu-card-header {
+  font-size: 0.9rem;
+  font-weight: 700;
+  border-bottom: 1px solid var(--border-color);
+  padding-bottom: 0.5rem;
+  margin-bottom: 1rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.aidu-results-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1.25rem;
+  align-items: start;
+}
+
+@media (max-width: 992px) {
+  .aidu-results-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.aidu-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.8rem;
+  text-align: left;
+}
+
+.aidu-table th, .aidu-table td {
+  padding: 0.45rem 0.6rem;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.aidu-table th {
+  background-color: var(--bg-main);
+  color: var(--text-muted);
+  font-weight: 700;
+}
+
+.aidu-table td {
+  color: var(--text-main);
+}
+
+.aidu-chart-card {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  height: 100%;
+}
+
+.aidu-chart-wrapper {
+  padding-bottom: 1.5rem;
+}
+
+.aidu-chart-container {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-around;
+  height: 140px;
+  border-left: 2px solid var(--text-light);
+  border-bottom: 2px solid var(--text-light);
+  padding: 0.5rem 0.5rem 0 0.5rem;
+  margin-top: 1rem;
+  position: relative;
+}
+
+.aidu-chart-bar-wrapper {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  flex: 1;
+  max-width: 45px;
+  height: 100%;
+  justify-content: flex-end;
+  position: relative;
+}
+
+.aidu-chart-bar {
+  background: linear-gradient(to top, var(--primary) 0%, #8b5cf6 100%);
+  width: 100%;
+  border-top-left-radius: 4px;
+  border-top-right-radius: 4px;
+  transition: height 0.8s cubic-bezier(0.4, 0, 0.2, 1);
+  position: relative;
+  cursor: pointer;
+}
+
+.aidu-chart-bar:hover {
+  background: var(--primary-hover);
+  box-shadow: 0 0 10px rgba(79, 70, 229, 0.3);
+}
+
+.aidu-chart-bar-tooltip {
+  position: absolute;
+  top: -28px;
+  background-color: #0f172a;
+  color: #ffffff;
+  padding: 0.2rem 0.5rem;
+  font-size: 0.7rem;
+  border-radius: 4px;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.25s;
+  white-space: nowrap;
+  z-index: 5;
+  box-shadow: var(--shadow-sm);
+}
+
+.aidu-chart-bar-wrapper:hover .aidu-chart-bar-tooltip {
+  opacity: 1;
+}
+
+.aidu-chart-bar-label {
+  font-size: 0.65rem;
+  color: var(--text-muted);
+  margin-top: 0.25rem;
+  position: absolute;
+  bottom: -20px;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  overflow: hidden;
+  max-width: 50px;
+}
+
+.aidu-stats-summary {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1rem;
+}
+
+.aidu-summary-item {
+  background-color: var(--bg-main);
+  padding: 0.75rem;
+  border-radius: 8px;
+  border: 1px solid var(--border-color);
+  text-align: center;
+}
+
+.aidu-summary-val {
+  font-size: 1.15rem;
+  font-weight: 800;
+  color: var(--text-main);
+}
+
+.aidu-summary-lbl {
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  margin-top: 0.2rem;
+  font-weight: 600;
+}
+
+/* Sidebar Lock Layout */
+.quiz-panel-right {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+  overflow-y: auto;
+  max-height: 720px;
+}
+
+.quiz-panel-right .card {
+  padding: 1.5rem;
+}
+
+.quiz-panel-right .question-grid {
+  grid-template-columns: repeat(5, 1fr) !important;
+}
+
+.aidu-import-zone {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 3rem 1.5rem;
+  border: 2px dashed var(--border-color);
+  background-color: var(--bg-card);
+  border-radius: var(--radius-md);
+  text-align: center;
+  cursor: pointer;
+  transition: var(--transition);
+  margin-top: 1.5rem;
+}
+
+.aidu-import-zone:hover {
+  border-color: var(--primary);
+  background-color: var(--primary-light);
+}
+
+body.dark-theme .aidu-import-zone:hover {
+  background-color: rgba(99, 102, 241, 0.08);
+}
+
