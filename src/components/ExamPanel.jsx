@@ -1,6 +1,7 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { supabase } from '../supabaseClient';
-import { Clock, ChevronLeft, ChevronRight, Send, AlertCircle, HelpCircle, UploadCloud, Home, Database, Brain, Cpu, Settings, BarChart2 } from 'lucide-react';
+import { Clock, ChevronLeft, ChevronRight, Send, AlertCircle, HelpCircle, UploadCloud, Home, Database, Brain, Cpu, Settings, BarChart2, Trash2 } from 'lucide-react';
+import AiduColumnCard from './AiduColumnCard';
 
 export default function ExamPanel({ 
   attempt, 
@@ -22,6 +23,8 @@ export default function ExamPanel({
   const [syncStatus, setSyncStatus] = useState('실시간 저장 중...');
   
   // AIDU Platform Simulator States
+  const [isCsvLoading, setIsCsvLoading] = useState(false);
+  const [csvLoadError, setCsvLoadError] = useState(null);
   const [uploadedFiles, setUploadedFiles] = useState({}); // { [filename]: { headers, rows } }
   const [activeFilename, setActiveFilename] = useState('');
   const [selectedColumns, setSelectedColumns] = useState([]);
@@ -35,12 +38,50 @@ export default function ExamPanel({
   // Visualization States
   const [vizType, setVizType] = useState('heatmap'); // 'heatmap' | 'scatter' | 'boxplot' | 'distribution' | 'wordcloud'
   const [vizRenderState, setVizRenderState] = useState(null);
+  const [hueColumn, setHueColumn] = useState('');
+  const [activeChart, setActiveChart] = useState('none');
+  const [boxplotY, setBoxplotY] = useState('');
+  const [boxplotX, setBoxplotX] = useState('');
+  const [distributionX, setDistributionX] = useState('');
+  const [hoveredBin, setHoveredBin] = useState(null);
+
 
   // Preprocessing States
   const [preprocessDropNa, setPreprocessDropNa] = useState(false);
   const [preprocessOneHot, setPreprocessOneHot] = useState(false);
   const [preprocessScale, setPreprocessScale] = useState(false);
   const [preprocessStatus, setPreprocessStatus] = useState('');
+  const [preprocessSelectedCol, setPreprocessSelectedCol] = useState('');
+  const [preprocessPreviewState, setPreprocessPreviewState] = useState(null);
+  const [preprocessToast, setPreprocessToast] = useState({ show: false, message1: '', message2: '' });
+
+  // Center panel tool options
+  const [prepImputerTool, setPrepImputerTool] = useState('basic_imputer');
+  const [prepImputerStrategy, setPrepImputerStrategy] = useState('most_frequent');
+  const [prepScaleTool, setPrepScaleTool] = useState('basic_scaler');
+  const [prepScaleStrategy, setPrepScaleStrategy] = useState('Min-Max Scaler');
+  const [prepTransTool, setPrepTransTool] = useState('');
+  const [prepTransStrategy, setPrepTransStrategy] = useState('uniform');
+  const [prepNQuantiles, setPrepNQuantiles] = useState(10);
+  const [prepFilterTool, setPrepFilterTool] = useState('missing_filter');
+  const [prepRegexTool, setPrepRegexTool] = useState('Regex');
+  const [prepRegexPattern, setPrepRegexPattern] = useState('(.*)');
+  const [prepNlpTool, setPrepNlpTool] = useState('pecab');
+  const [prepNlpStrategy, setPrepNlpStrategy] = useState('형태소 분석');
+
+  // Preprocessing Column Selection Auto-Sync
+  useEffect(() => {
+    if (activeFilename && uploadedFiles[activeFilename]) {
+      const { headers } = uploadedFiles[activeFilename];
+      if (headers && headers.length > 0 && !headers.includes(preprocessSelectedCol)) {
+        setPreprocessSelectedCol(headers[0]);
+        setPreprocessPreviewState(null);
+      }
+    } else {
+      setPreprocessSelectedCol('');
+      setPreprocessPreviewState(null);
+    }
+  }, [activeFilename, uploadedFiles]);
 
   // AI Training States
   const [modelTarget, setModelTarget] = useState('');
@@ -48,6 +89,53 @@ export default function ExamPanel({
   const [modelType, setModelType] = useState('linear'); // 'linear' | 'tree'
   const [trainedModel, setTrainedModel] = useState(null);
   const [isTraining, setIsTraining] = useState(false);
+
+  // ML Training Workspace States
+  const [mlOutputCol, setMlOutputCol] = useState('');
+  const [mlInputCols, setMlInputCols] = useState([]);
+  const [mlExcludeCols, setMlExcludeCols] = useState([]);
+  const [mlSelectedColInInput, setMlSelectedColInInput] = useState('');
+  const [mlSelectedColInOutput, setMlSelectedColInOutput] = useState('');
+  const [mlSelectedColInExclude, setMlSelectedColInExclude] = useState('');
+  
+  const [mlDataType, setMlDataType] = useState('Numeric');
+  const [mlModelType, setMlModelType] = useState('Classification');
+  const [mlOutlierHandling, setMlOutlierHandling] = useState('포함');
+  const [mlSelectedModels, setMlSelectedModels] = useState([]);
+  const [mlTrainRatio, setMlTrainRatio] = useState(0.7);
+  const [mlCvType, setMlCvType] = useState('stratifiedkfold');
+  const [mlCvFolds, setMlCvFolds] = useState(10);
+  const [mlImbalanceHandling, setMlImbalanceHandling] = useState('없음');
+  const [mlSortMetric, setMlSortMetric] = useState('Accuracy');
+  const [mlCvEnabled, setMlCvEnabled] = useState('true');
+  
+  const [mlTrainResults, setMlTrainResults] = useState(null);
+  const [mlToastShow, setMlToastShow] = useState(false);
+  const [mlIsTraining, setMlIsTraining] = useState(false);
+
+  // Sync columns list on file activation
+  useEffect(() => {
+    if (activeFilename && uploadedFiles[activeFilename]) {
+      const { headers } = uploadedFiles[activeFilename];
+      setMlInputCols([...headers]);
+      setMlOutputCol('');
+      setMlExcludeCols([]);
+      setMlSelectedColInInput('');
+      setMlSelectedColInOutput('');
+      setMlSelectedColInExclude('');
+      setMlTrainResults(null);
+      setMlSelectedModels([]);
+    } else {
+      setMlInputCols([]);
+      setMlOutputCol('');
+      setMlExcludeCols([]);
+      setMlSelectedColInInput('');
+      setMlSelectedColInOutput('');
+      setMlSelectedColInExclude('');
+      setMlTrainResults(null);
+      setMlSelectedModels([]);
+    }
+  }, [activeFilename]);
 
   // AI Prediction States
   const [predictInputs, setPredictInputs] = useState({});
@@ -58,7 +146,7 @@ export default function ExamPanel({
   const countdownTimerRef = useRef(null);
 
   const activeQuestion = questions[currentIdx] || null;
-  const hasAiduData = !!attempt.Exam?.csvData;
+  const hasAiduData = !!attempt.Exam?.aiduEnabled && !!attempt.Exam?.csvData;
 
   // Initialize answers from props
   useEffect(() => {
@@ -152,31 +240,80 @@ export default function ExamPanel({
 
   // Preload CSV dataset if present on Exam
   useEffect(() => {
-    if (attempt.Exam && attempt.Exam.csvData) {
-      const filename = attempt.Exam.csvFilename || 'exam_data.csv';
-      if (!uploadedFiles[filename]) {
-        const parsed = parseCsvData(attempt.Exam.csvData);
-        setTimeout(() => {
-          setUploadedFiles(prev => ({
-            ...prev,
-            [filename]: parsed
-          }));
-          setActiveFilename(filename);
-          setSelectedColumns([...parsed.headers]);
-          
-          const N = parsed.rows.length;
-          setDataRangeStart(0);
-          setDataRangeEnd(N);
-          setVizRenderState({
-            type: 'heatmap',
-            columns: [...parsed.headers],
-            rangeEnd: N
-          });
-          
-          setAnalysisResults(null);
-          setAiduTab('describe'); // Open 기초정보분석
-        }, 0);
+    if (!attempt.Exam) return;
+
+    let rawCsvData = attempt.Exam.csvData;
+    let filename = attempt.Exam.csvFilename;
+
+    const examName = attempt.Exam.name || '';
+    
+    // Force map standard exams to local public CSVs ONLY IF no custom csvData is configured by the admin
+    if (!rawCsvData) {
+      if (examName.includes('무선품질') || examName.includes('속도')) {
+        rawCsvData = '/속도_불량예측_utf8_분류.CSV';
+        filename = '속도_불량예측_utf8_분류.CSV';
+      } else if (examName.includes('전력') || examName.includes('기본') || examName.includes('모의고사')) {
+        rawCsvData = '/기지국전력량예측_회귀.csv';
+        filename = '기지국전력량예측_회귀.csv';
       }
+    }
+
+    if (!rawCsvData) return;
+    if (!filename) filename = 'exam_data.csv';
+
+    if (uploadedFiles[filename]) return; // already loaded
+
+    const isUrl = rawCsvData.startsWith('http://') || rawCsvData.startsWith('https://') || rawCsvData.startsWith('/');
+
+    const applyParsed = (parsed) => {
+      if (!parsed || parsed.headers.length === 0) {
+        console.warn('CSV 파싱 결과가 비어있습니다. 데이터를 확인해 주세요.');
+        return;
+      }
+      setUploadedFiles(prev => ({ ...prev, [filename]: parsed }));
+      setActiveFilename(filename);
+      setSelectedColumns([...parsed.headers]);
+      const N = parsed.rows.length;
+      setDataRangeStart(0);
+      setDataRangeEnd(N);
+      setVizRenderState({ type: 'heatmap', columns: [...parsed.headers], rangeEnd: N });
+      setAnalysisResults(null);
+      setAiduTab('describe');
+    };
+
+    if (isUrl) {
+      const fetchUrl = getDirectDownloadUrl(rawCsvData);
+
+      fetch(fetchUrl)
+        .then(res => {
+          if (!res.ok) throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+          return res.text();
+        })
+        .then(text => {
+          const parsed = parseCsvData(text);
+          applyParsed(parsed);
+        })
+        .catch(err => {
+          console.error('외부 CSV 로드 실패:', err);
+          if (fetchUrl.startsWith('http')) {
+            const proxyUrl = `https://corsproxy.io/?${encodeURIComponent(fetchUrl)}`;
+            return fetch(proxyUrl)
+              .then(res => res.text())
+              .then(text => {
+                const parsed = parseCsvData(text);
+                applyParsed(parsed);
+              })
+              .catch(proxyErr => {
+                console.error('CORS 프록시로도 로드 실패:', proxyErr);
+                alert(`데이터 로드 실패: ${err.message}\n\n구글 시트의 경우 [파일 > 공유 > 웹에 게시 > CSV]로 게시된 URL을 사용해 주세요.`);
+              });
+          } else {
+            console.error('로컬 리소스 로드 실패:', err);
+          }
+        });
+    } else {
+      const parsed = parseCsvData(rawCsvData);
+      setTimeout(() => applyParsed(parsed), 0);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [attempt]);
@@ -418,9 +555,10 @@ export default function ExamPanel({
   // Mini custom markdown renderer
   const renderContext = (text) => {
     if (!text) return null;
+    const cleanText = text.replace('<!--AIDU_MODE-->', '').replace('[markdown]', '');
+    if (!cleanText.trim()) return null;
     
-    // Convert newlines to breaks or paragraphs
-    const lines = text.split('\n');
+    const lines = cleanText.split('\n');
     return (
       <div className="markdown-desc-box">
         {lines.map((line, i) => {
@@ -500,7 +638,62 @@ export default function ExamPanel({
   // ==========================================
   // AIDU Platform Simulation Functions
   // ==========================================
+  const getDirectDownloadUrl = (url) => {
+    if (!url) return '';
+    const trimmed = url.trim();
+    if (trimmed.includes('docs.google.com/spreadsheets')) {
+      if (trimmed.includes('/pub')) {
+        if (!trimmed.includes('output=csv')) {
+          return trimmed.includes('?') ? `${trimmed}&output=csv` : `${trimmed}?output=csv`;
+        }
+        return trimmed;
+      }
+      const sheetIdMatch = trimmed.match(/\/spreadsheets\/d\/([a-zA-Z0-9_-]+)/);
+      if (sheetIdMatch && sheetIdMatch[1]) {
+        return `https://docs.google.com/spreadsheets/d/${sheetIdMatch[1]}/pub?output=csv`;
+      }
+    }
+    const fileDRegex = /\/file\/d\/([a-zA-Z0-9_-]+)/;
+    const match1 = trimmed.match(fileDRegex);
+    if (match1 && match1[1]) {
+      return `https://docs.google.com/uc?export=download&id=${match1[1]}`;
+    }
+    const idRegex = /[?&]id=([a-zA-Z0-9_-]+)/;
+    const match2 = trimmed.match(idRegex);
+    if (match2 && match2[1]) {
+      return `https://docs.google.com/uc?export=download&id=${match2[1]}`;
+    }
+    return trimmed;
+  };
+
+  const computeColumnTypes = (headers, rows) => {
+    const colTypes = {};
+    headers.forEach(col => {
+      const values = rows.map(r => r[col]);
+      const nonBlankVals = values.filter(v => v !== null && v !== undefined && v !== '');
+      if (nonBlankVals.length === 0) {
+        colTypes[col] = 'object';
+        return;
+      }
+      const numericValues = nonBlankVals.map(Number).filter(v => !isNaN(v));
+      if (numericValues.length / nonBlankVals.length >= 0.9) {
+        const hasDecimal = numericValues.some(v => !Number.isInteger(v)) || nonBlankVals.some(v => String(v).includes('.'));
+        colTypes[col] = hasDecimal ? 'float64' : 'int64';
+      } else {
+        colTypes[col] = 'object';
+      }
+    });
+    return colTypes;
+  };
+
   const parseCsvData = (text) => {
+    if (!text) return { headers: [], rows: [], types: {} };
+    const trimmed = text.trim();
+    if (trimmed.startsWith('<!DOCTYPE') || trimmed.startsWith('<html') || trimmed.startsWith('{') || trimmed.startsWith('[')) {
+      console.warn('Invalid CSV data structure (received HTML/JSON). Parsing aborted.');
+      return { headers: [], rows: [], types: {} };
+    }
+
     const rows = [];
     let currentRow = [];
     let currentCell = '';
@@ -562,7 +755,7 @@ export default function ExamPanel({
       }
     }
     
-    if (rows.length === 0) return { headers: [], rows: [] };
+    if (rows.length === 0) return { headers: [], rows: [], types: {} };
     
     const headers = rows[0];
     const dataRows = [];
@@ -575,7 +768,8 @@ export default function ExamPanel({
       dataRows.push(rowData);
     }
     
-    return { headers, rows: dataRows };
+    const types = computeColumnTypes(headers, dataRows);
+    return { headers, rows: dataRows, types };
   };
 
   const handleAiduFileUpload = (file) => {
@@ -616,14 +810,16 @@ export default function ExamPanel({
       setSelectedColumns([...parsed.headers]);
       
       const N = parsed.rows.length;
+      const initialEnd = Math.max(1, Math.floor(N * 0.3));
       setDataRangeStart(0);
-                setDataRangeEnd(N);
-                setVizRenderState({
-                  type: 'heatmap',
-                  columns: [...parsed.headers],
-                  rangeEnd: N
-                });
-                setAnalysisResults(null);
+      setDataRangeEnd(initialEnd);
+      setVizRenderState(null);
+      setHueColumn('');
+      setActiveChart('none');
+      setBoxplotY('');
+      setBoxplotX('');
+      setDistributionX('');
+      setAnalysisResults(null);
       setAiduTab('describe');
     };
     reader.readAsArrayBuffer(file);
@@ -647,6 +843,18 @@ export default function ExamPanel({
     const totalVars = headers.length;
     let totalMissing = 0;
     
+    // Helper to format values dynamically based on type
+    const formatVal = (num, colType, isIntOnly = false) => {
+      if (num === undefined || num === null || isNaN(num)) return '-';
+      if (colType === 'float64') {
+        return num.toFixed(2);
+      } else if (colType === 'int64') {
+        if (isIntOnly) return Math.round(num).toString();
+        return Number.isInteger(num) ? num.toString() : num.toFixed(2);
+      }
+      return String(num);
+    };
+
     // Find column data types and calculate column stats
     selectedColumns.forEach(col => {
       const values = activeRows.map(r => r[col]);
@@ -655,12 +863,15 @@ export default function ExamPanel({
       const nonBlankVals = values.filter(v => v !== null && v !== undefined && v !== '');
       let isNumeric = false;
       let numericValues = [];
+      let colType = 'object';
       
       if (nonBlankVals.length > 0) {
         numericValues = nonBlankVals.map(Number).filter(v => !isNaN(v));
         // If at least 90% of non-blank values are numeric, we treat column as numeric
         if (numericValues.length / nonBlankVals.length >= 0.9) {
           isNumeric = true;
+          const hasDecimal = numericValues.some(v => !Number.isInteger(v)) || nonBlankVals.some(v => String(v).includes('.'));
+          colType = hasDecimal ? 'float64' : 'int64';
         }
       }
       
@@ -673,7 +884,7 @@ export default function ExamPanel({
       
       const colResults = {
         name: col,
-        type: isNumeric ? 'numeric' : 'object',
+        type: colType,
         size: totalObs,
         distinct: distinctCount,
         distinctPct: ((distinctCount / totalObs) * 100).toFixed(2) + '%',
@@ -690,14 +901,14 @@ export default function ExamPanel({
         // Sum, Mean
         const sum = numericValues.reduce((a, b) => a + b, 0);
         const mean = sum / numericValues.length;
-        colResults.mean = mean.toFixed(2);
+        colResults.mean = formatVal(mean, colType);
         
         // Min, Max
         numericValues.sort((a, b) => a - b);
         const min = numericValues[0];
         const max = numericValues[numericValues.length - 1];
-        colResults.min = min;
-        colResults.max = max;
+        colResults.min = formatVal(min, colType, true);
+        colResults.max = formatVal(max, colType, true);
         
         // Median (50th percentile)
         const getPercentile = (arr, p) => {
@@ -708,27 +919,28 @@ export default function ExamPanel({
           return arr[low] + (arr[high] - arr[low]) * (idx - low);
         };
         
-        colResults.median = getPercentile(numericValues, 0.5).toFixed(2);
+        const median = getPercentile(numericValues, 0.5);
+        colResults.median = formatVal(median, colType);
         
         // Standard Deviation
         const sqDiffs = numericValues.map(v => Math.pow(v - mean, 2));
         const variance = sqDiffs.reduce((a, b) => a + b, 0) / numericValues.length;
         const sd = Math.sqrt(variance);
-        colResults.sd = sd.toFixed(2);
+        colResults.sd = formatVal(sd, colType);
         
         // Skewness
-        const skewness = sd > 0 ? (3 * (mean - parseFloat(colResults.median)) / sd) : 0;
-        colResults.skewness = skewness.toFixed(2);
+        const skewness = sd > 0 ? (3 * (mean - median) / sd) : 0;
+        colResults.skewness = formatVal(skewness, colType);
         
         // Quantiles
         colResults.quantiles = {
-          min: min.toFixed(2),
-          p5: getPercentile(numericValues, 0.05).toFixed(2),
-          q1: getPercentile(numericValues, 0.25).toFixed(2),
+          min: formatVal(min, colType, true),
+          p5: formatVal(getPercentile(numericValues, 0.05), colType),
+          q1: formatVal(getPercentile(numericValues, 0.25), colType),
           median: colResults.median,
-          q3: getPercentile(numericValues, 0.75).toFixed(2),
-          p95: getPercentile(numericValues, 0.95).toFixed(2),
-          max: max.toFixed(2)
+          q3: formatVal(getPercentile(numericValues, 0.75), colType),
+          p95: formatVal(getPercentile(numericValues, 0.95), colType),
+          max: formatVal(max, colType, true)
         };
         
         // Generate Histogram data (10 bins)
@@ -742,7 +954,7 @@ export default function ExamPanel({
             start: binStart,
             end: binEnd,
             count: 0,
-            label: range > 0 ? `${binStart.toFixed(0)}` : `${binStart.toFixed(0)}`
+            label: range > 0 ? `${formatVal(binStart, colType, true)}` : `${formatVal(binStart, colType, true)}`
           };
         });
         
@@ -797,8 +1009,9 @@ export default function ExamPanel({
     });
     
     // Overall Stats Object
-    const numericColsCount = selectedColumns.filter(c => results[c].type === 'numeric').length;
-    const objectColsCount = selectedColumns.length - numericColsCount;
+    const int64ColsCount = selectedColumns.filter(c => results[c].type === 'int64').length;
+    const float64ColsCount = selectedColumns.filter(c => results[c].type === 'float64').length;
+    const objectColsCount = selectedColumns.filter(c => results[c].type === 'object').length;
     
     const missingCellRatio = ((totalMissing / (totalObs * totalVars)) * 100).toFixed(2) + '%';
     
@@ -816,7 +1029,8 @@ export default function ExamPanel({
       duplicated_rows: duplicatedRowsCount,
       duplicated_rows_ratio: duplicatedRowsRatio,
       types: {
-        numeric: numericColsCount,
+        int64: int64ColsCount,
+        float64: float64ColsCount,
         object: objectColsCount
       }
     };
@@ -872,7 +1086,7 @@ export default function ExamPanel({
                         setSelectedColumns([...file.headers]);
                         const N = file.rows.length;
                         setDataRangeStart(0);
-                        setDataRangeEnd(N);
+                        setDataRangeEnd(Math.max(1, Math.floor(N * 0.3)));
                       }
                       setAnalysisResults(null);
                       setAiduTab('describe');
@@ -892,6 +1106,7 @@ export default function ExamPanel({
   const renderAiduDescribeTab = () => {
     if (!activeFilename || !uploadedFiles[activeFilename]) return null;
     const fileData = uploadedFiles[activeFilename];
+    const { headers, rows, types } = fileData;
 
     return (
       <div style={{ display: 'flex', width: '100%', height: '100%', overflow: 'hidden' }}>
@@ -911,7 +1126,7 @@ export default function ExamPanel({
                   setSelectedColumns([...file.headers]);
                   const N = file.rows.length;
                   setDataRangeStart(0);
-                  setDataRangeEnd(N);
+                  setDataRangeEnd(Math.max(1, Math.floor(N * 0.3)));
                 }
                 setAnalysisResults(null);
               }}
@@ -919,6 +1134,26 @@ export default function ExamPanel({
               {Object.keys(uploadedFiles).map(name => (
                 <option key={name} value={name}>{name}</option>
               ))}
+            </select>
+          </div>
+
+          <div className="form-group">
+            <label style={{ fontSize: '0.8rem', fontWeight: 'bold' }}>Hue 컬럼 선택</label>
+            <select 
+              className="form-control" 
+              style={{ fontSize: '0.8rem', padding: '0.4rem' }}
+              value={hueColumn}
+              onChange={(e) => setHueColumn(e.target.value)}
+            >
+              <option value="">선택 안 함 (None)</option>
+              {headers.map(col => {
+                const colType = fileData.types?.[col] || 'object';
+                return (
+                  <option key={col} value={col}>
+                    {col} ({colType})
+                  </option>
+                );
+              })}
             </select>
           </div>
 
@@ -976,9 +1211,7 @@ export default function ExamPanel({
             <div className="aidu-column-list">
               {fileData.headers.map(col => {
                 const isSelected = selectedColumns.includes(col);
-                // Simple type check for UI label
-                const firstVal = fileData.rows.find(r => r[col] !== '')?.[col];
-                const isNum = firstVal !== undefined && !isNaN(Number(firstVal));
+                const colType = fileData.types?.[col] || 'object';
                 
                 return (
                   <div 
@@ -993,7 +1226,7 @@ export default function ExamPanel({
                     }}
                   >
                     <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '140px' }}>{col}</span>
-                    <span className="aidu-column-type">{isNum ? 'int64' : 'object'}</span>
+                    <span className="aidu-column-type">{colType}</span>
                   </div>
                 );
               })}
@@ -1020,240 +1253,77 @@ export default function ExamPanel({
             </div>
           ) : (
             <>
-              {/* Overall Statistics */}
-              <div className="aidu-card">
-                <div className="aidu-card-header">기초 정보 분석 결과</div>
-                <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 0.8fr', gap: '1.5rem' }}>
-                  <div>
-                    <div className="aidu-section-title">데이터 정보</div>
-                    <table className="aidu-table">
-                      <thead>
-                        <tr>
-                          <th>항목</th>
-                          <th>값</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        <tr>
-                          <td>num_of_obs (관측치 수)</td>
-                          <td style={{ fontWeight: 'bold' }}>{analysisResults.overall.num_of_obs.toLocaleString()}</td>
-                        </tr>
-                        <tr>
-                          <td>num_of_var (변수 수)</td>
-                          <td style={{ fontWeight: 'bold' }}>{analysisResults.overall.num_of_var}</td>
-                        </tr>
-                        <tr>
-                          <td>missing_cell (결측치 총합)</td>
-                          <td>{analysisResults.overall.missing_cell}</td>
-                        </tr>
-                        <tr>
-                          <td>missing_cell_ratio (결측 비율)</td>
-                          <td>{analysisResults.overall.missing_cell_ratio}</td>
-                        </tr>
-                        <tr>
-                          <td>duplicated_rows (중복 행)</td>
-                          <td>{analysisResults.overall.duplicated_rows}</td>
-                        </tr>
-                        <tr>
-                          <td>duplicated_rows_ratio (중복 비율)</td>
-                          <td>{analysisResults.overall.duplicated_rows_ratio}</td>
-                        </tr>
-                      </tbody>
-                    </table>
-                  </div>
-
-                  <div>
-                    <div className="aidu-section-title">유형</div>
-                    <table className="aidu-table">
-                      <thead>
-                        <tr>
-                          <th>타입</th>
-                          <th>개수</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        <tr>
-                          <td>numeric (수치형)</td>
-                          <td style={{ fontWeight: 'bold' }}>{analysisResults.overall.types.numeric}</td>
-                        </tr>
-                        <tr>
-                          <td>object (범주형)</td>
-                          <td style={{ fontWeight: 'bold' }}>{analysisResults.overall.types.object}</td>
-                        </tr>
-                      </tbody>
-                    </table>
-                  </div>
+              {/* Overall Statistics: Side-by-side Summary Cards */}
+              <div style={{ display: 'flex', gap: '0.75rem', marginBottom: '0.75rem' }}>
+                
+                {/* Card 1: Data Information */}
+                <div className="aidu-card" style={{ flex: 1.2, padding: '0.6rem 0.8rem', border: '1px solid #dfe1e6', borderRadius: '4px', backgroundColor: '#ffffff', boxShadow: 'none' }}>
+                  <div style={{ fontWeight: '700', fontSize: '0.75rem', marginBottom: '0.35rem', color: '#172b4d' }}>데이터 정보 (Data Information)</div>
+                  <table style={{ borderCollapse: 'collapse', fontSize: '0.68rem', width: '100%' }}>
+                    <thead>
+                      <tr>
+                        <th style={{ textAlign: 'left', padding: '0.15rem 0.25rem 0.15rem 0', borderBottom: '1px solid #dfe1e6', color: '#5e6c84', fontSize: '0.6rem', fontWeight: '600' }}>항목</th>
+                        <th style={{ textAlign: 'right', padding: '0.15rem 0 0.15rem 0.25rem', borderBottom: '1px solid #dfe1e6', color: '#5e6c84', fontSize: '0.6rem', fontWeight: '600' }}>값</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr style={{ borderBottom: '1px solid #dfe1e6' }}>
+                        <td style={{ padding: '0.12rem 0.25rem 0.12rem 0', color: '#5e6c84' }}>num_of_obs (관측치 수)</td>
+                        <td style={{ textAlign: 'right', padding: '0.12rem 0 0.12rem 0.25rem', fontWeight: 'bold', color: '#172b4d' }}>{analysisResults.overall.num_of_obs.toLocaleString()}</td>
+                      </tr>
+                      <tr style={{ borderBottom: '1px solid #dfe1e6' }}>
+                        <td style={{ padding: '0.12rem 0.25rem 0.12rem 0', color: '#5e6c84' }}>num_of_var (변수 수)</td>
+                        <td style={{ textAlign: 'right', padding: '0.12rem 0 0.12rem 0.25rem', fontWeight: 'bold', color: '#172b4d' }}>{analysisResults.overall.num_of_var}</td>
+                      </tr>
+                      <tr style={{ borderBottom: '1px solid #dfe1e6' }}>
+                        <td style={{ padding: '0.12rem 0.25rem 0.12rem 0', color: '#5e6c84' }}>missing_cell (결측치 총합)</td>
+                        <td style={{ textAlign: 'right', padding: '0.12rem 0 0.12rem 0.25rem', color: '#172b4d' }}>{analysisResults.overall.missing_cell}</td>
+                      </tr>
+                      <tr style={{ borderBottom: '1px solid #dfe1e6' }}>
+                        <td style={{ padding: '0.12rem 0.25rem 0.12rem 0', color: '#5e6c84' }}>missing_cell_ratio (결측 비율)</td>
+                        <td style={{ textAlign: 'right', padding: '0.12rem 0 0.12rem 0.25rem', color: '#172b4d' }}>{analysisResults.overall.missing_cell_ratio}</td>
+                      </tr>
+                      <tr style={{ borderBottom: '1px solid #dfe1e6' }}>
+                        <td style={{ padding: '0.12rem 0.25rem 0.12rem 0', color: '#5e6c84' }}>duplicated_rows (중복 행)</td>
+                        <td style={{ textAlign: 'right', padding: '0.12rem 0 0.12rem 0.25rem', color: '#172b4d' }}>{analysisResults.overall.duplicated_rows}</td>
+                      </tr>
+                      <tr style={{ borderBottom: '1px solid #dfe1e6' }}>
+                        <td style={{ padding: '0.12rem 0.25rem 0.12rem 0', color: '#5e6c84' }}>duplicated_rows_ratio (중복 비율)</td>
+                        <td style={{ textAlign: 'right', padding: '0.12rem 0 0.12rem 0.25rem', color: '#172b4d' }}>{analysisResults.overall.duplicated_rows_ratio}</td>
+                      </tr>
+                    </tbody>
+                  </table>
                 </div>
+
+                {/* Card 2: Type Summary */}
+                <div className="aidu-card" style={{ flex: 0.8, padding: '0.6rem 0.8rem', border: '1px solid #dfe1e6', borderRadius: '4px', backgroundColor: '#ffffff', boxShadow: 'none' }}>
+                  <div style={{ fontWeight: '700', fontSize: '0.75rem', marginBottom: '0.35rem', color: '#172b4d' }}>데이터 유형 요약 (Type Summary)</div>
+                  <table style={{ borderCollapse: 'collapse', fontSize: '0.68rem', width: '100%' }}>
+                    <thead>
+                      <tr>
+                        <th style={{ textAlign: 'left', padding: '0.15rem 0.25rem 0.15rem 0', borderBottom: '1px solid #dfe1e6', color: '#5e6c84', fontSize: '0.6rem', fontWeight: '600' }}>타입</th>
+                        <th style={{ textAlign: 'right', padding: '0.15rem 0 0.15rem 0.25rem', borderBottom: '1px solid #dfe1e6', color: '#5e6c84', fontSize: '0.6rem', fontWeight: '600' }}>개수</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr style={{ borderBottom: '1px solid #dfe1e6' }}>
+                        <td style={{ padding: '0.12rem 0.25rem 0.12rem 0', color: '#5e6c84' }}>numeric (수치형)</td>
+                        <td style={{ textAlign: 'right', padding: '0.12rem 0 0.12rem 0.25rem', fontWeight: 'bold', color: '#172b4d' }}>{analysisResults.overall.types.numeric}</td>
+                      </tr>
+                      <tr style={{ borderBottom: '1px solid #dfe1e6' }}>
+                        <td style={{ padding: '0.12rem 0.25rem 0.12rem 0', color: '#5e6c84' }}>object (범주형)</td>
+                        <td style={{ textAlign: 'right', padding: '0.12rem 0 0.12rem 0.25rem', fontWeight: 'bold', color: '#172b4d' }}>{analysisResults.overall.types.object}</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+
               </div>
 
               {/* Column Breakdowns */}
-              {Object.keys(analysisResults.columns).map(colName => {
-                const col = analysisResults.columns[colName];
-                const isNumeric = col.type === 'numeric';
-
-                return (
-                  <div key={colName} className="aidu-card">
-                    <div className="aidu-card-header">
-                      <span>{colName}</span>
-                      <span className="aidu-column-type" style={{ backgroundColor: isNumeric ? 'var(--primary-light)' : 'var(--border-color)', color: isNumeric ? 'var(--primary)' : 'inherit' }}>
-                        {isNumeric ? 'numeric (수치형)' : 'object (범주형)'}
-                      </span>
-                    </div>
-
-                    <div className="aidu-results-grid">
-                      {/* Left: Stats tables */}
-                      <div>
-                        <div style={{ display: 'grid', gridTemplateColumns: isNumeric ? '1.2fr 0.8fr' : '1fr', gap: '1rem' }}>
-                          <div>
-                            <div className="aidu-section-title">기술통계</div>
-                            <table className="aidu-table">
-                              <tbody>
-                                <tr>
-                                  <td>size</td>
-                                  <td>{col.size}</td>
-                                </tr>
-                                <tr>
-                                  <td>distinct</td>
-                                  <td>{col.distinct}</td>
-                                </tr>
-                                <tr>
-                                  <td>distinct(%)</td>
-                                  <td>{col.distinctPct}</td>
-                                </tr>
-                                <tr>
-                                  <td>missing</td>
-                                  <td>{col.missing}</td>
-                                </tr>
-                                <tr>
-                                  <td>missing(%)</td>
-                                  <td>{col.missingPct}</td>
-                                </tr>
-                                {isNumeric && (
-                                  <>
-                                    <tr>
-                                      <td>zeros</td>
-                                      <td>{col.zeros}</td>
-                                    </tr>
-                                    <tr>
-                                      <td>zeros(%)</td>
-                                      <td>{col.zerosPct}</td>
-                                    </tr>
-                                    <tr>
-                                      <td>mean</td>
-                                      <td style={{ fontWeight: 'bold' }}>{col.mean}</td>
-                                    </tr>
-                                    <tr>
-                                      <td>median</td>
-                                      <td>{col.median}</td>
-                                    </tr>
-                                    <tr>
-                                      <td>sd</td>
-                                      <td>{col.sd}</td>
-                                    </tr>
-                                    <tr>
-                                      <td>skewness</td>
-                                      <td>{col.skewness}</td>
-                                    </tr>
-                                  </>
-                                )}
-                              </tbody>
-                            </table>
-                          </div>
-
-                          {isNumeric && col.quantiles && (
-                            <div>
-                              <div className="aidu-section-title">분위수</div>
-                              <table className="aidu-table">
-                                <tbody>
-                                  <tr>
-                                    <td>min</td>
-                                    <td>{col.quantiles.min}</td>
-                                  </tr>
-                                  <tr>
-                                    <td>5th_per</td>
-                                    <td>{col.quantiles.p5}</td>
-                                  </tr>
-                                  <tr>
-                                    <td>q1</td>
-                                    <td>{col.quantiles.q1}</td>
-                                  </tr>
-                                  <tr>
-                                    <td>median</td>
-                                    <td style={{ fontWeight: 'bold' }}>{col.quantiles.median}</td>
-                                  </tr>
-                                  <tr>
-                                    <td>q3</td>
-                                    <td>{col.quantiles.q3}</td>
-                                  </tr>
-                                  <tr>
-                                    <td>95th_per</td>
-                                    <td>{col.quantiles.p95}</td>
-                                  </tr>
-                                  <tr>
-                                    <td>max</td>
-                                    <td>{col.quantiles.max}</td>
-                                  </tr>
-                                </tbody>
-                              </table>
-                            </div>
-                          )}
-                        </div>
-
-                        {!isNumeric && col.topFrequencies && (
-                          <div style={{ marginTop: '1rem' }}>
-                            <div className="aidu-section-title">최빈값 (상위 5개)</div>
-                            <table className="aidu-table">
-                              <thead>
-                                <tr>
-                                  <th>값</th>
-                                  <th>빈도</th>
-                                  <th>비율</th>
-                                </tr>
-                              </thead>
-                              <tbody>
-                                {col.topFrequencies.map((item, i) => (
-                                  <tr key={i}>
-                                    <td style={{ fontWeight: 'bold' }}>{item.value === '' ? '(empty)' : item.value}</td>
-                                    <td>{item.count}</td>
-                                    <td>{item.percentage}</td>
-                                  </tr>
-                                ))}
-                              </tbody>
-                            </table>
-                          </div>
-                        )}
-                      </div>
-
-                      {/* Right: Chart */}
-                      <div className="aidu-chart-card">
-                        <div className="aidu-section-title">{isNumeric ? '히스토그램' : '바차트'}</div>
-                        <div className="aidu-chart-wrapper">
-                          <div className="aidu-chart-container">
-                            {col.chartData && col.chartData.map((bar, i) => {
-                              const barHeight = parseFloat(bar.percentage);
-                              return (
-                                <div key={i} className="aidu-chart-bar-wrapper">
-                                  <div 
-                                    className="aidu-chart-bar" 
-                                    style={{ height: `${Math.max(barHeight, 3)}%` }}
-                                  >
-                                    <div className="aidu-chart-bar-tooltip">
-                                      {bar.label}: {bar.count}개 ({bar.percentage}%)
-                                    </div>
-                                  </div>
-                                  <div className="aidu-chart-bar-label" title={bar.label}>
-                                    {bar.label}
-                                  </div>
-                                </div>
-                              );
-                            })}
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
+              {Object.keys(analysisResults.columns).map(colName => (
+                <AiduColumnCard key={colName} colName={colName} col={analysisResults.columns[colName]} />
+              ))}
             </>
           )}
         </div>
@@ -1352,6 +1422,8 @@ export default function ExamPanel({
     
     // Helper to check numeric column
     const isNumericColumn = (col) => {
+      const type = fileData.types?.[col];
+      if (type) return type === 'int64' || type === 'float64';
       const nonBlank = fileData.rows.map(r => r[col]).filter(v => v !== undefined && v !== '');
       if (nonBlank.length === 0) return false;
       return nonBlank.every(v => !isNaN(Number(v)));
@@ -1361,16 +1433,27 @@ export default function ExamPanel({
     
     // Perform viz analysis
     const handlePerformVizAnalysis = () => {
+      let cols = [...selectedColumns];
+      if (vizType === 'boxplot') {
+        cols = [boxplotY, boxplotX].filter(Boolean);
+      } else if (vizType === 'distribution') {
+        cols = [distributionX].filter(Boolean);
+      }
+
       setVizRenderState({
         type: vizType,
-        columns: [...selectedColumns],
+        columns: cols,
+        boxplotY,
+        boxplotX,
+        distributionX,
         rangeEnd: dataRangeEnd
       });
+      setActiveChart(vizType);
     };
 
-    const currentVizType = vizRenderState?.type || 'heatmap';
+    const currentVizType = activeChart;
     const currentCols = vizRenderState?.columns || [];
-    const currentRangeEnd = vizRenderState?.rangeEnd || fileData.rows.length;
+    const currentRangeEnd = vizRenderState?.rangeEnd || Math.max(1, Math.floor(fileData.rows.length * 0.3));
     const currentSlicedRows = fileData.rows.slice(0, currentRangeEnd);
 
     // Calculate correlation for selected numeric cols
@@ -1554,8 +1637,8 @@ export default function ExamPanel({
       });
 
       return (
-        <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '1rem', backgroundColor: 'var(--bg-card)', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
-          <svg width={svgWidth} height={svgHeight}>
+        <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '1rem', backgroundColor: 'var(--bg-card)', borderRadius: '8px', border: '1px solid var(--border-color)', width: '100%', height: '100%' }}>
+          <svg viewBox="0 0 550 450" style={{ width: '100%', height: 'auto', maxWidth: '550px', maxHeight: '450px' }}>
             {gradient}
             {/* Grid Cells */}
             {cells}
@@ -1572,54 +1655,173 @@ export default function ExamPanel({
     // Render Scatter SVG
     const renderScatterPlot = () => {
       const numericSelected = currentCols.filter(isNumericColumn);
-      if (numericSelected.length < 2) return <p style={{ fontSize: '0.85rem', color: 'var(--text-light)' }}>산점도를 그리려면 수치형 변수를 2개 이상 선택해 주세요.</p>;
-      
-      const activeX = numericSelected[0];
-      const activeY = numericSelected[1];
-      const xVals = currentSlicedRows.map(r => Number(r[activeX])).filter(v => !isNaN(v));
-      const yVals = currentSlicedRows.map(r => Number(r[activeY])).filter(v => !isNaN(v));
-      
-      if (xVals.length === 0 || yVals.length === 0) return <p style={{ fontSize: '0.85rem', color: 'var(--text-light)' }}>수치형 데이터를 포함하고 있지 않습니다.</p>;
+      if (numericSelected.length < 2) {
+        return (
+          <p style={{ fontSize: '0.85rem', color: 'var(--text-light)', padding: '1rem' }}>
+            산점도를 그리려면 수치형 변수를 2개 이상 선택해 주세요.
+          </p>
+        );
+      }
 
-      const xMin = Math.min(...xVals);
-      const xMax = Math.max(...xVals);
-      const yMin = Math.min(...yVals);
-      const yMax = Math.max(...yVals);
+      const K = numericSelected.length;
+      const hasHue = hueColumn && headers.includes(hueColumn);
 
-      const width = 500;
-      const height = 300;
-      const padding = 50;
-
-      const points = currentSlicedRows.map((r, idx) => {
-        const x = Number(r[activeX]);
-        const y = Number(r[activeY]);
-        if (isNaN(x) || isNaN(y)) return null;
-
-        const cx = padding + ((x - xMin) / (xMax - xMin || 1)) * (width - 2 * padding);
-        const cy = height - padding - ((y - yMin) / (yMax - yMin || 1)) * (height - 2 * padding);
-
-        return <circle key={idx} cx={cx} cy={cy} r="4" fill="var(--primary)" opacity="0.6" />;
-      }).filter(Boolean).slice(0, 150); // Draw top 150 points
+      // Pre-calculate min/max for each numeric column to avoid nested loops recalculation
+      const colStats = {};
+      numericSelected.forEach(col => {
+        const vals = currentSlicedRows.map(r => Number(r[col])).filter(v => !isNaN(v));
+        colStats[col] = {
+          vals,
+          min: vals.length ? Math.min(...vals) : 0,
+          max: vals.length ? Math.max(...vals) : 1
+        };
+      });
 
       return (
-        <div style={{ display: 'flex', justifyContent: 'center', padding: '1rem', backgroundColor: 'var(--bg-card)', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
-          <svg width={width} height={height}>
-            {/* Grid lines */}
-            <line x1={padding} y1={height - padding} x2={width - padding} y2={height - padding} stroke="var(--border-color)" strokeWidth="2" />
-            <line x1={padding} y1={padding} x2={padding} y2={height - padding} stroke="var(--border-color)" strokeWidth="2" />
-            
-            {points}
+        <div style={{ display: 'flex', alignItems: 'flex-start', gap: '1rem', width: '100%' }}>
+          <div 
+            style={{ 
+              display: 'grid', 
+              gridTemplateColumns: `repeat(${K}, 1fr)`, 
+              gap: '6px', 
+              flexGrow: 1,
+              maxWidth: '550px',
+              padding: '0.5rem', 
+              backgroundColor: 'var(--bg-card)', 
+              borderRadius: '8px', 
+              border: '1px solid var(--border-color)',
+              boxSizing: 'border-box'
+            }}
+          >
+            {numericSelected.map((yCol, i) => {
+              return numericSelected.map((xCol, j) => {
+                const key = `cell-${i}-${j}`;
+                
+                if (i === j) {
+                  // Diagonal: Column name
+                  return (
+                    <div 
+                      key={key} 
+                      style={{ 
+                        display: 'flex', 
+                        flexDirection: 'column',
+                        alignItems: 'center', 
+                        justifyContent: 'center', 
+                        border: '1px dashed var(--border-color)', 
+                        borderRadius: '4px', 
+                        background: 'var(--bg-main)',
+                        padding: '4px',
+                        aspectRatio: '1',
+                        boxSizing: 'border-box'
+                      }}
+                    >
+                      <span 
+                        style={{ 
+                          fontSize: '8px', 
+                          fontWeight: 'bold', 
+                          textAlign: 'center', 
+                          color: 'var(--text-main)', 
+                          wordBreak: 'break-all',
+                          lineHeight: '1.2'
+                        }}
+                      >
+                        {xCol}
+                      </span>
+                    </div>
+                  );
+                }
 
-            {/* Labels */}
-            <text x={width / 2} y={height - 10} textAnchor="middle" fontSize="10" fontWeight="bold" fill="var(--text-muted)">{activeX}</text>
-            <text x="15" y={height / 2} textAnchor="middle" fontSize="10" fontWeight="bold" transform={`rotate(-90 15 ${height / 2})`} fill="var(--text-muted)">{activeY}</text>
-            
-            {/* Min/Max values */}
-            <text x={padding} y={height - padding + 15} fontSize="9" fill="var(--text-muted)" textAnchor="middle">{xMin.toFixed(1)}</text>
-            <text x={width - padding} y={height - padding + 15} fontSize="9" fill="var(--text-muted)" textAnchor="middle">{xMax.toFixed(1)}</text>
-            <text x={padding - 5} y={height - padding} fontSize="9" fill="var(--text-muted)" textAnchor="end" dominantBaseline="middle">{yMin.toFixed(1)}</text>
-            <text x={padding - 5} y={padding} fontSize="9" fill="var(--text-muted)" textAnchor="end" dominantBaseline="middle">{yMax.toFixed(1)}</text>
-          </svg>
+                // Non-diagonal: Pairwise scatter plot
+                const xStat = colStats[xCol];
+                const yStat = colStats[yCol];
+                const xMin = xStat.min;
+                const xMax = xStat.max;
+                const yMin = yStat.min;
+                const yMax = yStat.max;
+
+                const points = currentSlicedRows.map((r, idx) => {
+                  const xVal = Number(r[xCol]);
+                  const yVal = Number(r[yCol]);
+                  if (isNaN(xVal) || isNaN(yVal)) return null;
+
+                  const cx = 15 + ((xVal - xMin) / (xMax - xMin || 1)) * 70;
+                  const cy = 85 - ((yVal - yMin) / (yMax - yMin || 1)) * 70;
+
+                  // Hue Color Code (Blue for 1, Orange for 0)
+                  let dotFill = "var(--primary)";
+                  if (hasHue && r[hueColumn] !== undefined) {
+                    const hueVal = String(r[hueColumn]);
+                    if (hueVal === '1') {
+                      dotFill = "#3b82f6";
+                    } else if (hueVal === '0') {
+                      dotFill = "#f97316";
+                    }
+                  }
+
+                  return <circle key={idx} cx={cx} cy={cy} r="2" fill={dotFill} opacity="0.8" />;
+                }).filter(Boolean).slice(0, 300); // 300 points for denser scatter
+
+                return (
+                  <div 
+                    key={key} 
+                    style={{ 
+                      border: '1px solid var(--border-color)', 
+                      borderRadius: '4px', 
+                      background: 'var(--bg-main)',
+                      aspectRatio: '1',
+                      padding: '2px',
+                      boxSizing: 'border-box'
+                    }}
+                  >
+                    <svg viewBox="0 0 100 100" style={{ width: '100%', height: '100%' }}>
+                      {/* Axes */}
+                      <line x1="15" y1="85" x2="85" y2="85" stroke="var(--border-color)" strokeWidth="1" />
+                      <line x1="15" y1="15" x2="15" y2="85" stroke="var(--border-color)" strokeWidth="1" />
+
+                      {/* Data Points */}
+                      {points}
+
+                      {/* Bounds Ticks Text */}
+                      <text x="15" y="93" fontSize="6" fill="var(--text-muted)" textAnchor="middle">{xMin.toFixed(1)}</text>
+                      <text x="85" y="93" fontSize="6" fill="var(--text-muted)" textAnchor="middle">{xMax.toFixed(1)}</text>
+                      <text x="12" y="85" fontSize="6" fill="var(--text-muted)" textAnchor="end" dominantBaseline="middle">{yMin.toFixed(1)}</text>
+                      <text x="12" y="15" fontSize="6" fill="var(--text-muted)" textAnchor="end" dominantBaseline="middle">{yMax.toFixed(1)}</text>
+                    </svg>
+                  </div>
+                );
+              });
+            })}
+          </div>
+
+          {/* Right vertical legend */}
+          {hasHue && (
+            <div 
+              style={{ 
+                width: '100px', 
+                flexShrink: 0, 
+                display: 'flex', 
+                flexDirection: 'column', 
+                borderLeft: '1px solid var(--border-color)', 
+                paddingLeft: '0.75rem',
+                boxSizing: 'border-box',
+                marginTop: '1rem'
+              }}
+            >
+              <span style={{ fontSize: '9px', fontWeight: 'bold', color: 'var(--text-main)', marginBottom: '0.4rem' }}>
+                {hueColumn}
+              </span>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
+                  <div style={{ width: '6px', height: '6px', backgroundColor: '#3b82f6', borderRadius: '50%' }} />
+                  <span style={{ fontSize: '8px', color: 'var(--text-muted)' }}>1</span>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
+                  <div style={{ width: '6px', height: '6px', backgroundColor: '#f97316', borderRadius: '50%' }} />
+                  <span style={{ fontSize: '8px', color: 'var(--text-muted)' }}>0</span>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       );
     };
@@ -1627,70 +1829,196 @@ export default function ExamPanel({
     // Render Boxplot SVG
     const renderBoxPlot = () => {
       const numericSelected = currentCols.filter(isNumericColumn);
-      if (numericSelected.length < 1) return <p style={{ fontSize: '0.85rem', color: 'var(--text-light)' }}>박스차트를 그리려면 수치형 변수를 1개 이상 선택해 주세요.</p>;
+      if (numericSelected.length < 1) {
+        return (
+          <p style={{ fontSize: '0.85rem', color: 'var(--text-light)', padding: '1rem' }}>
+            박스차트를 그리려면 수치형 변수를 1개 이상 선택해 주세요.
+          </p>
+        );
+      }
       
       const targetCol = numericSelected[0];
-      const vals = currentSlicedRows.map(r => Number(r[targetCol])).filter(v => !isNaN(v)).sort((a,b)=>a-b);
-      
-      if (vals.length === 0) return <p style={{ fontSize: '0.85rem', color: 'var(--text-light)' }}>수치형 데이터가 존재하지 않습니다.</p>;
+      const hasHue = hueColumn && headers.includes(hueColumn);
 
-      const q1 = vals[Math.floor(vals.length * 0.25)];
-      const median = vals[Math.floor(vals.length * 0.5)];
-      const q3 = vals[Math.floor(vals.length * 0.75)];
-      const minVal = vals[0];
-      const maxVal = vals[vals.length - 1];
+      // Grouping data
+      const groups = {};
+      if (hasHue) {
+        currentSlicedRows.forEach(r => {
+          const val = Number(r[targetCol]);
+          const hueVal = r[hueColumn];
+          if (!isNaN(val) && hueVal !== undefined && hueVal !== '') {
+            if (!groups[hueVal]) groups[hueVal] = [];
+            groups[hueVal].push(val);
+          }
+        });
+      } else {
+        const vals = currentSlicedRows.map(r => Number(r[targetCol])).filter(v => !isNaN(v));
+        if (vals.length > 0) {
+          groups['전체'] = vals;
+        }
+      }
 
-      const width = 500;
-      const height = 250;
-      const padding = 50;
+      const groupNames = Object.keys(groups).sort();
+      if (groupNames.length === 0) {
+        return (
+          <p style={{ fontSize: '0.85rem', color: 'var(--text-light)', padding: '1rem' }}>
+            유효한 수치형 데이터가 존재하지 않습니다.
+          </p>
+        );
+      }
 
-      // Scale value to X coordinate
-      const scaleX = (val) => {
-        const range = maxVal - minVal || 1;
-        return padding + ((val - minVal) / range) * (width - 2 * padding);
+      // Calculate overall min/max for Y axis scale
+      let allVals = [];
+      groupNames.forEach(g => { allVals = allVals.concat(groups[g]); });
+      const overallMin = Math.min(...allVals);
+      const overallMax = Math.max(...allVals);
+      const yRange = overallMax - overallMin || 1;
+
+      // Calculate stats for each group
+      const groupStats = groupNames.map(g => {
+        const vals = [...groups[g]].sort((a, b) => a - b);
+        const minVal = vals[0];
+        const maxVal = vals[vals.length - 1];
+        const q1 = vals[Math.floor(vals.length * 0.25)];
+        const median = vals[Math.floor(vals.length * 0.5)];
+        const q3 = vals[Math.floor(vals.length * 0.75)];
+        return { name: g, minVal, q1, median, q3, maxVal };
+      });
+
+      const svgWidth = 400;
+      const svgHeight = 280;
+      const paddingY = 40;
+      const paddingLeft = 50;
+      const paddingRight = 30;
+      const chartWidth = svgWidth - paddingLeft - paddingRight;
+
+      const scaleY = (val) => {
+        return svgHeight - paddingY - ((val - overallMin) / yRange) * (svgHeight - 2 * paddingY);
       };
 
-      const xMin = scaleX(minVal);
-      const xQ1 = scaleX(q1);
-      const xMed = scaleX(median);
-      const xQ3 = scaleX(q3);
-      const xMax = scaleX(maxVal);
-
-      const yMiddle = height / 2;
-      const boxHeight = 80;
+      const colors = ['#ef4444', '#3b82f6', '#10b981', '#f59e0b', '#ec4899', '#8b5cf6'];
+      const bgColors = ['rgba(239, 68, 68, 0.15)', 'rgba(59, 130, 246, 0.15)', 'rgba(16, 185, 129, 0.15)', 'rgba(245, 158, 11, 0.15)'];
 
       return (
-        <div style={{ display: 'flex', justifyContent: 'center', padding: '1rem', backgroundColor: 'var(--bg-card)', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
-          <svg width={width} height={height}>
-            {/* Title */}
-            <text x={width/2} y={30} textAnchor="middle" fontSize="11" fontWeight="bold" fill="var(--text-main)">{targetCol} 박스차트</text>
-            
-            {/* Whiskers */}
-            <line x1={xMin} y1={yMiddle} x2={xQ1} y2={yMiddle} stroke="var(--primary)" strokeWidth="2" />
-            <line x1={xQ3} y1={yMiddle} x2={xMax} y2={yMiddle} stroke="var(--primary)" strokeWidth="2" />
-            
-            {/* Min & Max lines */}
-            <line x1={xMin} y1={yMiddle - 20} x2={xMin} y2={yMiddle + 20} stroke="var(--primary)" strokeWidth="2" />
-            <line x1={xMax} y1={yMiddle - 20} x2={xMax} y2={yMiddle + 20} stroke="var(--primary)" strokeWidth="2" />
+        <div 
+          style={{ 
+            display: 'flex', 
+            alignItems: 'stretch', 
+            gap: '1rem', 
+            padding: '1rem', 
+            backgroundColor: 'var(--bg-card)', 
+            borderRadius: '8px', 
+            border: '1px solid var(--border-color)',
+            width: '100%',
+            boxSizing: 'border-box'
+          }}
+        >
+          {/* Chart Canvas */}
+          <div style={{ flexGrow: 1, position: 'relative' }}>
+            <svg viewBox={`0 0 ${svgWidth} ${svgHeight}`} style={{ width: '100%', height: 'auto', maxWidth: `${svgWidth}px` }}>
+              {/* Title */}
+              <text x={svgWidth / 2} y={20} textAnchor="middle" fontSize="10" fontWeight="bold" fill="var(--text-main)">
+                {targetCol} 분포 {hasHue ? `(by ${hueColumn})` : ''}
+              </text>
 
-            {/* Box */}
-            <rect x={xQ1} y={yMiddle - boxHeight/2} width={xQ3 - xQ1} height={boxHeight} fill="rgba(79, 70, 229, 0.15)" stroke="var(--primary)" strokeWidth="2" />
-            
-            {/* Median line */}
-            <line x1={xMed} y1={yMiddle - boxHeight/2} x2={xMed} y2={yMiddle + boxHeight/2} stroke="var(--danger)" strokeWidth="3" />
+              {/* Y Axis line */}
+              <line x1={paddingLeft} y1={paddingY} x2={paddingLeft} y2={svgHeight - paddingY} stroke="var(--border-color)" strokeWidth="1.5" />
+              
+              {/* Y Axis ticks */}
+              {[overallMin, overallMin + yRange * 0.25, overallMin + yRange * 0.5, overallMin + yRange * 0.75, overallMax].map((v, i) => {
+                const y = scaleY(v);
+                return (
+                  <g key={i}>
+                    <line x1={paddingLeft - 4} y1={y} x2={paddingLeft} y2={y} stroke="var(--border-color)" strokeWidth="1" />
+                    <text x={paddingLeft - 8} y={y} textAnchor="end" dominantBaseline="middle" fontSize="7" fill="var(--text-muted)">
+                      {v.toFixed(2)}
+                    </text>
+                  </g>
+                );
+              })}
 
-            {/* Scale Ticks */}
-            <line x1={padding} y1={height - 40} x2={width - padding} y2={height - 40} stroke="var(--border-color)" strokeWidth="1" />
-            {[minVal, q1, median, q3, maxVal].map((v, i) => {
-              const xPos = scaleX(v);
-              return (
-                <g key={i}>
-                  <line x1={xPos} y1={height - 40} x2={xPos} y2={height - 35} stroke="var(--border-color)" strokeWidth="1" />
-                  <text x={xPos} y={height - 22} textAnchor="middle" fontSize="8" fill="var(--text-muted)">{v.toFixed(1)}</text>
-                </g>
-              );
-            })}
-          </svg>
+              {/* X Axis base line */}
+              <line x1={paddingLeft} y1={svgHeight - paddingY} x2={svgWidth - paddingRight} y2={svgHeight - paddingY} stroke="var(--border-color)" strokeWidth="1" />
+
+              {/* Group Plots */}
+              {groupStats.map((stat, idx) => {
+                const numGroups = groupStats.length;
+                // Calculate X coordinate for each box plot center
+                const xCenter = paddingLeft + (chartWidth / (numGroups + 1)) * (idx + 1);
+                const boxW = Math.min(45, chartWidth / (numGroups + 1) * 0.6);
+
+                const yMin = scaleY(stat.minVal);
+                const yQ1 = scaleY(stat.q1);
+                const yMed = scaleY(stat.median);
+                const yQ3 = scaleY(stat.q3);
+                const yMax = scaleY(stat.maxVal);
+
+                const color = colors[idx % colors.length];
+                const bgColor = bgColors[idx % bgColors.length];
+
+                return (
+                  <g key={idx}>
+                    {/* Whiskers */}
+                    <line x1={xCenter} y1={yMin} x2={xCenter} y2={yQ1} stroke={color} strokeWidth="1.5" strokeDasharray="2,2" />
+                    <line x1={xCenter} y1={yQ3} x2={xCenter} y2={yMax} stroke={color} strokeWidth="1.5" strokeDasharray="2,2" />
+                    <line x1={xCenter - boxW/3} y1={yMin} x2={xCenter + boxW/3} y2={yMin} stroke={color} strokeWidth="1.5" />
+                    <line x1={xCenter - boxW/3} y1={yMax} x2={xCenter + boxW/3} y2={yMax} stroke={color} strokeWidth="1.5" />
+
+                    {/* Box */}
+                    <rect 
+                      x={xCenter - boxW/2} 
+                      y={yQ3} 
+                      width={boxW} 
+                      height={Math.max(2, yQ1 - yQ3)} 
+                      fill={bgColor} 
+                      stroke={color} 
+                      strokeWidth="1.5" 
+                      rx="1"
+                    />
+
+                    {/* Median Line */}
+                    <line x1={xCenter - boxW/2} y1={yMed} x2={xCenter + boxW/2} y2={yMed} stroke={color} strokeWidth="2.5" />
+
+                    {/* X Label */}
+                    <text x={xCenter} y={svgHeight - paddingY + 14} textAnchor="middle" fontSize="8" fontWeight="bold" fill="var(--text-muted)">
+                      {stat.name}
+                    </text>
+                  </g>
+                );
+              })}
+            </svg>
+          </div>
+
+          {/* Categorical Legend Block on Far Right */}
+          <div 
+            style={{ 
+              width: '100px', 
+              flexShrink: 0, 
+              display: 'flex', 
+              flexDirection: 'column', 
+              justifyContent: 'center', 
+              borderLeft: '1px solid var(--border-color)', 
+              paddingLeft: '0.75rem',
+              boxSizing: 'border-box'
+            }}
+          >
+            <span style={{ fontSize: '8px', fontWeight: 'bold', textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: '0.4rem', letterSpacing: '0.05em' }}>
+              {hasHue ? hueColumn : '범례'}
+            </span>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
+              {groupStats.map((stat, idx) => {
+                const color = colors[idx % colors.length];
+                return (
+                  <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
+                    <div style={{ width: '8px', height: '8px', backgroundColor: color, borderRadius: '2px', flexShrink: 0 }} />
+                    <span style={{ fontSize: '8px', fontWeight: 'bold', color: 'var(--text-main)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                      {stat.name}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
         </div>
       );
     };
@@ -1698,66 +2026,214 @@ export default function ExamPanel({
     // Render Distribution Hist SVG
     const renderDistributionPlot = () => {
       const numericSelected = currentCols.filter(isNumericColumn);
-      if (numericSelected.length < 1) return <p style={{ fontSize: '0.85rem', color: 'var(--text-light)' }}>분포차트를 그리려면 수치형 변수를 1개 이상 선택해 주세요.</p>;
+      if (numericSelected.length < 1) {
+        return (
+          <p style={{ fontSize: '0.85rem', color: 'var(--text-light)', padding: '1rem' }}>
+            분포차트를 그리려면 수치형 변수를 1개 이상 선택해 주세요.
+          </p>
+        );
+      }
       
       const targetCol = numericSelected[0];
-      const vals = currentSlicedRows.map(r => Number(r[targetCol])).filter(v => !isNaN(v));
-      if (vals.length === 0) return <p style={{ fontSize: '0.85rem', color: 'var(--text-light)' }}>수치형 데이터가 존재하지 않습니다.</p>;
+      const hasHue = hueColumn && headers.includes(hueColumn);
 
-      const minVal = Math.min(...vals);
-      const maxVal = Math.max(...vals);
+      const allVals = currentSlicedRows.map(r => Number(r[targetCol])).filter(v => !isNaN(v));
+      if (allVals.length === 0) {
+        return (
+          <p style={{ fontSize: '0.85rem', color: 'var(--text-light)', padding: '1rem' }}>
+            수치형 데이터가 존재하지 않습니다.
+          </p>
+        );
+      }
+
+      const minVal = Math.min(...allVals);
+      const maxVal = Math.max(...allVals);
       const range = maxVal - minVal || 1;
       const numBins = 10;
       const binWidth = range / numBins;
 
-      const bins = Array(numBins).fill(0);
-      vals.forEach(v => {
-        let binIdx = Math.floor((v - minVal) / binWidth);
-        if (binIdx >= numBins) binIdx = numBins - 1;
-        bins[binIdx]++;
+      // Grouping logic for bins
+      const groupBins = {};
+      if (hasHue) {
+        currentSlicedRows.forEach(r => {
+          const val = Number(r[targetCol]);
+          const hueVal = r[hueColumn];
+          if (!isNaN(val) && hueVal !== undefined && hueVal !== '') {
+            if (!groupBins[hueVal]) {
+              groupBins[hueVal] = Array(numBins).fill(0);
+            }
+            let binIdx = Math.floor((val - minVal) / binWidth);
+            if (binIdx >= numBins) binIdx = numBins - 1;
+            if (binIdx < 0) binIdx = 0;
+            groupBins[hueVal][binIdx]++;
+          }
+        });
+      } else {
+        groupBins['Total'] = Array(numBins).fill(0);
+        allVals.forEach(val => {
+          let binIdx = Math.floor((val - minVal) / binWidth);
+          if (binIdx >= numBins) binIdx = numBins - 1;
+          if (binIdx < 0) binIdx = 0;
+          groupBins['Total'][binIdx]++;
+        });
+      }
+
+      const groupNames = Object.keys(groupBins).sort();
+      let maxCount = 1;
+      groupNames.forEach(g => {
+        const m = Math.max(...groupBins[g]);
+        if (m > maxCount) maxCount = m;
       });
 
-      const maxCount = Math.max(...bins) || 1;
-
       const svgWidth = 500;
-      const svgHeight = 250;
-      const padding = 40;
+      const svgHeight = 280;
+      const padding = 45;
       const chartWidth = svgWidth - 2 * padding;
       const chartHeight = svgHeight - 2 * padding;
-      const barWidth = chartWidth / numBins - 4;
+      const barWidth = chartWidth / numBins - 6;
+
+      const colors = ['#ef4444', '#3b82f6', '#10b981', '#f59e0b', '#ec4899', '#8b5cf6'];
+      const fillColors = [
+        'rgba(239, 68, 68, 0.55)', // Orange/Red for '0' / first
+        'rgba(59, 130, 246, 0.55)', // Blue for '1' / second
+        'rgba(16, 185, 129, 0.55)',
+        'rgba(245, 158, 11, 0.55)'
+      ];
 
       return (
-        <div style={{ display: 'flex', justifyContent: 'center', padding: '1rem', backgroundColor: 'var(--bg-card)', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
-          <svg width={svgWidth} height={svgHeight}>
+        <div style={{ display: 'flex', justifyContent: 'center', padding: '1rem', backgroundColor: 'var(--bg-card)', borderRadius: '8px', border: '1px solid var(--border-color)', width: '100%', boxSizing: 'border-box' }}>
+          <svg viewBox={`0 0 ${svgWidth} ${svgHeight}`} style={{ width: '100%', height: 'auto', maxWidth: `${svgWidth}px` }}>
             {/* Title */}
-            <text x={svgWidth/2} y={20} textAnchor="middle" fontSize="11" fontWeight="bold" fill="var(--text-main)">{targetCol} 분포 히스토그램 (10 Bins)</text>
+            <text x={svgWidth/2} y={20} textAnchor="middle" fontSize="10" fontWeight="bold" fill="var(--text-main)">
+              {targetCol} 분포 히스토그램 (10 Bins) {hasHue ? `(by ${hueColumn})` : ''}
+            </text>
             
             {/* Axes */}
-            <line x1={padding} y1={svgHeight - padding} x2={svgWidth - padding} y2={svgHeight - padding} stroke="var(--text-light)" strokeWidth="2" />
-            
-            {bins.map((count, i) => {
-              const barHeight = (count / maxCount) * chartHeight;
-              const x = padding + i * (chartWidth / numBins) + 2;
-              const y = svgHeight - padding - barHeight;
-              const binLow = minVal + i * binWidth;
+            <line x1={padding} y1={svgHeight - padding} x2={svgWidth - padding} y2={svgHeight - padding} stroke="var(--border-color)" strokeWidth="1.5" />
+            <line x1={padding} y1={padding} x2={padding} y2={svgHeight - padding} stroke="var(--border-color)" strokeWidth="1.5" />
 
+            {/* Y ticks */}
+            {[0, maxCount * 0.25, maxCount * 0.5, maxCount * 0.75, maxCount].map((v, i) => {
+              const y = svgHeight - padding - (v / maxCount) * chartHeight;
               return (
                 <g key={i}>
-                  <rect x={x} y={y} width={barWidth} height={barHeight} fill="var(--primary)" opacity="0.85" rx="2" />
-                  <text x={x + barWidth/2} y={y - 5} textAnchor="middle" fontSize="8" fill="var(--text-main)">{count}</text>
+                  <line x1={padding - 4} y1={y} x2={padding} y2={y} stroke="var(--border-color)" strokeWidth="1" />
+                  <text x={padding - 8} y={y} textAnchor="end" dominantBaseline="middle" fontSize="7" fill="var(--text-muted)">
+                    {Math.round(v)}
+                  </text>
+                </g>
+              );
+            })}
+
+            {/* Hist Bars */}
+            {Array(numBins).fill(0).map((_, binIdx) => {
+              const x = padding + binIdx * (chartWidth / numBins) + 3;
+              const binLow = minVal + binIdx * binWidth;
+              const binHigh = binLow + binWidth;
+              
+              return (
+                <g key={binIdx}>
+                  {/* Overlapping Bars */}
+                  {groupNames.map((gName, gIdx) => {
+                    const count = groupBins[gName][binIdx] || 0;
+                    if (count === 0) return null;
+                    const barHeight = (count / maxCount) * chartHeight;
+                    const y = svgHeight - padding - barHeight;
+                    const fillColor = fillColors[gIdx % fillColors.length];
+                    const strokeColor = colors[gIdx % colors.length];
+
+                    return (
+                      <rect 
+                        key={gName}
+                        x={x} 
+                        y={y} 
+                        width={barWidth} 
+                        height={barHeight} 
+                        fill={fillColor} 
+                        stroke={strokeColor}
+                        strokeWidth="1"
+                        rx="1"
+                        style={{ cursor: 'pointer' }}
+                        onMouseEnter={() => {
+                          setHoveredBin({
+                            x: x + barWidth / 2,
+                            y: y,
+                            hueVal: gName,
+                            rangeStr: `${binLow.toFixed(0)} - ${binHigh.toFixed(2)}`,
+                            count
+                          });
+                        }}
+                        onMouseLeave={() => setHoveredBin(null)}
+                      />
+                    );
+                  })}
+                  
+                  {/* X Axis Tick Labels */}
                   <text 
                     x={x + barWidth/2} 
-                    y={svgHeight - padding + 15} 
+                    y={svgHeight - padding + 12} 
                     textAnchor="middle" 
-                    fontSize="7" 
+                    fontSize="6" 
                     fill="var(--text-muted)"
-                    transform={`rotate(-15 ${x + barWidth/2} ${svgHeight - padding + 15})`}
+                    transform={`rotate(-15 ${x + barWidth/2} ${svgHeight - padding + 12})`}
                   >
                     {binLow.toFixed(1)}
                   </text>
                 </g>
               );
             })}
+
+            {/* Hue Legend inside canvas on the top right */}
+            <g transform={`translate(${svgWidth - padding - 95}, 30)`}>
+              {/* Background card for legend */}
+              <rect x="0" y="0" width="90" height={15 + groupNames.length * 12} fill="var(--bg-main)" stroke="var(--border-color)" strokeWidth="1" rx="3" opacity="0.9" />
+              <text x="8" y="10" fontSize="6.5" fontWeight="bold" fill="var(--text-muted)">{hasHue ? hueColumn : '범례'}</text>
+              {groupNames.map((gName, gIdx) => {
+                const color = colors[gIdx % colors.length];
+                const yPos = 20 + gIdx * 12;
+                return (
+                  <g key={gName} transform={`translate(8, ${yPos})`}>
+                    <rect x="0" y="-5" width="8" height="6" fill={color} rx="1" />
+                    <text x="14" y="0" fontSize="7" fontWeight="bold" fill="var(--text-main)">{gName}</text>
+                  </g>
+                );
+              })}
+            </g>
+
+            {/* Hover Tooltip Overlay (matching image 4) */}
+            {hoveredBin && (() => {
+              const tooltipWidth = 110;
+              const tooltipHeight = 42;
+              let tx = hoveredBin.x - tooltipWidth / 2;
+              let ty = hoveredBin.y - tooltipHeight - 6;
+
+              // Boundary check
+              if (tx < 10) tx = 10;
+              if (tx + tooltipWidth > svgWidth - 10) tx = svgWidth - tooltipWidth - 10;
+              if (ty < 10) ty = hoveredBin.y + 10;
+
+              return (
+                <g transform={`translate(${tx}, ${ty})`}>
+                  <rect 
+                    width={tooltipWidth} 
+                    height={tooltipHeight} 
+                    fill="#d24b33" 
+                    stroke="#1a1a1a" 
+                    strokeWidth="1.2" 
+                    rx="1" 
+                  />
+                  <text x="6" y="11" fill="#1a1a1a" fontSize="7.5" fontWeight="bold">
+                    {hasHue ? `${hueColumn}=${hoveredBin.hueVal}` : `Group=Total`}
+                  </text>
+                  <text x="6" y="23" fill="#1a1a1a" fontSize="7.5" fontWeight="bold">
+                    {targetCol}={hoveredBin.rangeStr}
+                  </text>
+                  <text x="6" y="35" fill="#1a1a1a" fontSize="7.5" fontWeight="bold">
+                    count={hoveredBin.count}
+                  </text>
+                </g>
+              );
+            })()}
           </svg>
         </div>
       );
@@ -1820,13 +2296,15 @@ export default function ExamPanel({
                 if (file) {
                   setSelectedColumns([...file.headers]);
                   const N = file.rows.length;
+                  const initialEnd = Math.max(1, Math.floor(N * 0.3));
                   setDataRangeStart(0);
-                  setDataRangeEnd(N);
-                  setVizRenderState({
-                    type: 'heatmap',
-                    columns: [...file.headers],
-                    rangeEnd: N
-                  });
+                  setDataRangeEnd(initialEnd);
+                  setVizRenderState(null);
+                  setHueColumn('');
+                  setActiveChart('none');
+                  setBoxplotY('');
+                  setBoxplotX('');
+                  setDistributionX('');
                 }
               }}
             >
@@ -1884,6 +2362,28 @@ export default function ExamPanel({
             </select>
           </div>
 
+          {(vizType === 'scatter' || vizType === 'boxplot' || vizType === 'distribution') && (
+            <div className="form-group">
+              <label style={{ fontSize: '0.8rem', fontWeight: 'bold' }}>Hue 컬럼 선택</label>
+              <select 
+                className="form-control" 
+                style={{ fontSize: '0.8rem', padding: '0.4rem' }}
+                value={hueColumn}
+                onChange={(e) => setHueColumn(e.target.value)}
+              >
+                <option value="">선택 안 함 (None)</option>
+                {headers.map(col => {
+                  const colType = fileData.types?.[col] || 'object';
+                  return (
+                    <option key={col} value={col}>
+                      {col} ({colType})
+                    </option>
+                  );
+                })}
+              </select>
+            </div>
+          )}
+
           <div className="form-group" style={{ display: 'flex', flexDirection: 'column', flex: 1 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
               <label style={{ fontSize: '0.8rem', fontWeight: 'bold', margin: 0 }}>컬럼 선택</label>
@@ -1906,7 +2406,7 @@ export default function ExamPanel({
             <div className="aidu-column-list" style={{ maxHeight: '180px', overflowY: 'auto' }}>
               {headers.map(col => {
                 const isSelected = selectedColumns.includes(col);
-                const isNum = isNumericColumn(col);
+                const colType = fileData.types?.[col] || 'object';
                 
                 return (
                   <div 
@@ -1921,7 +2421,7 @@ export default function ExamPanel({
                     }}
                   >
                     <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '140px' }}>{col}</span>
-                    <span className="aidu-column-type">{isNum ? 'int64' : 'object'}</span>
+                    <span className="aidu-column-type">{colType}</span>
                   </div>
                 );
               })}
@@ -1944,42 +2444,59 @@ export default function ExamPanel({
         </div>
 
         {/* Right Results Panel */}
-        <div className="aidu-results-panel" style={{ overflowY: 'auto' }}>
-          <div className="aidu-card">
+        <div className="aidu-results-panel" style={{ overflowY: 'auto', flexGrow: 1, height: '100%', width: '100%' }}>
+          <div className="aidu-card" style={{ position: 'relative' }}>
             <div className="aidu-card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <span>시각화 분석 결과</span>
-              <span style={{ fontSize: '0.75rem', fontWeight: '500', color: 'var(--text-muted)' }}>
-                대상 데이터: {activeFilename}
-              </span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                <span style={{ fontSize: '0.75rem', fontWeight: '500', color: 'var(--text-muted)' }}>
+                  대상 데이터: {activeFilename}
+                </span>
+                {vizRenderState && (
+                  <div style={{ display: 'flex', gap: '0.25rem' }}>
+                    <button type="button" className="btn-text-action" style={{ fontSize: '0.7rem', padding: '2px 5px', border: '1px solid var(--border-color)', borderRadius: '4px', background: 'var(--bg-main)' }} onClick={() => alert('차트 이미지 다운로드 완료(데모)')}>💾 다운로드</button>
+                    <button type="button" className="btn-text-action" style={{ fontSize: '0.7rem', padding: '2px 5px', border: '1px solid var(--border-color)', borderRadius: '4px', background: 'var(--bg-main)' }} onClick={() => alert('차트 줌 인(데모)')}>🔍 줌</button>
+                    <button type="button" className="btn-text-action" style={{ fontSize: '0.7rem', padding: '2px 5px', border: '1px solid var(--border-color)', borderRadius: '4px', background: 'var(--bg-main)' }} onClick={() => alert('차트 상태 초기화(데모)')}>🔄 리셋</button>
+                  </div>
+                )}
+              </div>
             </div>
             
-            <div style={{ marginTop: '0.5rem' }}>
-              {currentVizType === 'heatmap' && (
-                <div>
+            <div style={{ marginTop: '0.5rem', width: '100%', height: '100%', display: 'flex', flexDirection: 'column' }}>
+              {activeChart === 'none' && (
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '300px', flexGrow: 1, color: 'var(--text-muted)', gap: '0.75rem' }}>
+                  <div style={{ fontSize: '2.5rem', opacity: 0.4 }}>📊</div>
+                  <div style={{ fontSize: '0.85rem', fontWeight: '500', color: 'var(--text-light)' }}>
+                    분석하기 버튼을 클릭하여 데이터를 시각화하세요
+                  </div>
+                </div>
+              )}
+              {activeChart === 'heatmap' && (
+                <div style={{ flexGrow: 1, width: '100%', height: '100%' }}>
                   <div style={{ fontSize: '0.85rem', fontWeight: 'bold', marginBottom: '0.5rem', color: 'var(--text-muted)' }}>히트맵</div>
                   {renderHeatmapSvg()}
                 </div>
               )}
-              {currentVizType === 'scatter' && (
-                <div>
+              {activeChart === 'scatter' && (
+                <div style={{ flexGrow: 1, width: '100%', height: '100%' }}>
                   <div style={{ fontSize: '0.85rem', fontWeight: 'bold', marginBottom: '0.5rem', color: 'var(--text-muted)' }}>산점도</div>
                   {renderScatterPlot()}
                 </div>
               )}
-              {currentVizType === 'boxplot' && (
-                <div>
+              {activeChart === 'boxplot' && (
+                <div style={{ flexGrow: 1, width: '100%', height: '100%' }}>
                   <div style={{ fontSize: '0.85rem', fontWeight: 'bold', marginBottom: '0.5rem', color: 'var(--text-muted)' }}>박스차트</div>
                   {renderBoxPlot()}
                 </div>
               )}
-              {currentVizType === 'distribution' && (
-                <div>
+              {activeChart === 'distribution' && (
+                <div style={{ flexGrow: 1, width: '100%', height: '100%' }}>
                   <div style={{ fontSize: '0.85rem', fontWeight: 'bold', marginBottom: '0.5rem', color: 'var(--text-muted)' }}>분포차트</div>
                   {renderDistributionPlot()}
                 </div>
               )}
-              {currentVizType === 'wordcloud' && (
-                <div>
+              {activeChart === 'wordcloud' && (
+                <div style={{ flexGrow: 1, width: '100%', height: '100%' }}>
                   <div style={{ fontSize: '0.85rem', fontWeight: 'bold', marginBottom: '0.5rem', color: 'var(--text-muted)' }}>워드클라우드</div>
                   {renderWordCloud()}
                 </div>
@@ -1989,7 +2506,9 @@ export default function ExamPanel({
         </div>
       </div>
     );
-  };const renderAiduUnsupervisedTab = () => {
+  };
+
+  const renderAiduUnsupervisedTab = () => {
     if (!activeFilename || !uploadedFiles[activeFilename]) return null;
 
     return (
@@ -2032,143 +2551,1488 @@ export default function ExamPanel({
 
   const renderAiduPreprocessTab = () => {
     if (!activeFilename || !uploadedFiles[activeFilename]) return null;
-    const { headers, rows } = uploadedFiles[activeFilename];
+    const { headers, rows, types } = uploadedFiles[activeFilename];
 
-    const handleRunPreprocess = () => {
-      setPreprocessStatus('가공 분석 처리 중...');
-      
-      setTimeout(() => {
-        let processedRows = [...rows];
-        
-        // 1. Drop NA
-        if (preprocessDropNa) {
-          processedRows = processedRows.filter(r => {
-            return Object.values(r).every(v => v !== null && v !== undefined && v !== '');
+    const colName = preprocessSelectedCol || headers[0] || '';
+    const colType = types?.[colName] || 'object';
+    const isNumeric = colType === 'int64' || colType === 'float64';
+
+    // 1. Calculate Descriptive Stats
+    const getColumnStats = (targetColName) => {
+      if (!targetColName || !rows || rows.length === 0) return null;
+      const vals = rows.map(r => r[targetColName]);
+      const totalSize = vals.length;
+      const missingCount = vals.filter(v => v === null || v === undefined || String(v).trim() === '' || String(v).toLowerCase() === 'null').length;
+      const missingPercent = totalSize > 0 ? ((missingCount / totalSize) * 100).toFixed(2) : '0.00';
+
+      const validVals = vals.filter(v => v !== null && v !== undefined && String(v).trim() !== '' && String(v).toLowerCase() !== 'null');
+      const uniqueVals = Array.from(new Set(validVals));
+      const distinctCount = uniqueVals.length;
+      const distinctPercent = totalSize > 0 ? ((distinctCount / totalSize) * 100).toFixed(2) : '0.00';
+
+      // Frequencies
+      const freqMap = {};
+      validVals.forEach(v => {
+        freqMap[v] = (freqMap[v] || 0) + 1;
+      });
+      const sortedFreqs = Object.entries(freqMap)
+        .map(([val, count]) => ({
+          val,
+          count,
+          percent: totalSize > 0 ? ((count / totalSize) * 100).toFixed(2) : '0.00'
+        }))
+        .sort((a, b) => b.count - a.count)
+        .slice(0, 5);
+
+      const targetType = types?.[targetColName] || 'object';
+      const targetIsNumeric = targetType === 'int64' || targetType === 'float64';
+
+      if (targetIsNumeric) {
+        const numVals = validVals.map(Number).filter(v => !isNaN(v));
+        const N = numVals.length;
+        if (N === 0) {
+          return {
+            isNumeric: true,
+            size: totalSize,
+            distinct: distinctCount,
+            distinctPercent,
+            missing: missingCount,
+            missingPercent,
+            mean: 'N/A',
+            median: 'N/A',
+            sum: 'N/A',
+            sd: 'N/A',
+            skewness: 'N/A',
+            minimum: 'N/A',
+            maximum: 'N/A',
+            zeros: 0,
+            zerosPercent: '0.00',
+            quantiles: { min: 'N/A', p5: 'N/A', q1: 'N/A', median: 'N/A', q3: 'N/A', p95: 'N/A', max: 'N/A' },
+            sortedFreqs
+          };
+        }
+
+        numVals.sort((a, b) => a - b);
+
+        const sum = numVals.reduce((a, b) => a + b, 0);
+        const mean = sum / N;
+        const median = N % 2 === 1 ? numVals[Math.floor(N / 2)] : (numVals[N / 2 - 1] + numVals[N / 2]) / 2;
+
+        const sqDiffSum = numVals.reduce((a, b) => a + Math.pow(b - mean, 2), 0);
+        const sd = Math.sqrt(sqDiffSum / Math.max(1, N - 1));
+
+        // skewness
+        let skewness = 0;
+        if (N > 2 && sd > 0) {
+          const cubedSum = numVals.reduce((a, b) => a + Math.pow((b - mean) / sd, 3), 0);
+          skewness = (N / ((N - 1) * (N - 2))) * cubedSum;
+        }
+
+        const minimum = numVals[0];
+        const maximum = numVals[N - 1];
+        const zerosCount = numVals.filter(v => v === 0).length;
+        const zerosPercent = totalSize > 0 ? ((zerosCount / totalSize) * 100).toFixed(2) : '0.00';
+
+        const getQuantile = (q) => {
+          const idx = q * (N - 1);
+          const low = Math.floor(idx);
+          const high = Math.ceil(idx);
+          if (low === high) return numVals[low];
+          return numVals[low] + (idx - low) * (numVals[high] - numVals[low]);
+        };
+
+        const quantiles = {
+          min: minimum.toFixed(2),
+          p5: getQuantile(0.05).toFixed(2),
+          q1: getQuantile(0.25).toFixed(2),
+          median: median.toFixed(2),
+          q3: getQuantile(0.75).toFixed(2),
+          p95: getQuantile(0.95).toFixed(2),
+          max: maximum.toFixed(2)
+        };
+
+        return {
+          isNumeric: true,
+          size: totalSize,
+          distinct: distinctCount,
+          distinctPercent,
+          missing: missingCount,
+          missingPercent,
+          mean: mean.toFixed(2),
+          median: median.toFixed(2),
+          sum: sum.toFixed(2),
+          sd: sd.toFixed(2),
+          skewness: skewness.toFixed(2),
+          minimum: minimum.toFixed(2),
+          maximum: maximum.toFixed(2),
+          zeros: zerosCount,
+          zerosPercent,
+          quantiles,
+          sortedFreqs,
+          rawValues: numVals
+        };
+      } else {
+        return {
+          isNumeric: false,
+          size: totalSize,
+          distinct: distinctCount,
+          distinctPercent,
+          missing: missingCount,
+          missingPercent,
+          sortedFreqs,
+          rawValues: validVals
+        };
+      }
+    };
+
+    const stats = getColumnStats(colName);
+
+    // 2. Local Action Handlers
+    const handleFileChange = (e) => {
+      const fn = e.target.value;
+      setActiveFilename(fn);
+      if (uploadedFiles[fn]) {
+        const { headers } = uploadedFiles[fn];
+        setPreprocessSelectedCol(headers[0] || '');
+        setPreprocessPreviewState(null);
+      }
+    };
+
+    const handleDeleteColumn = () => {
+      if (!activeFilename || !uploadedFiles[activeFilename] || !colName) return;
+      if (!confirm(`선택한 컬럼 [${colName}]을 데이터셋에서 삭제하시겠습니까?`)) return;
+
+      const updatedHeaders = headers.filter(h => h !== colName);
+      const updatedRows = rows.map(r => {
+        const copy = { ...r };
+        delete copy[colName];
+        return copy;
+      });
+      const updatedTypes = { ...types };
+      delete updatedTypes[colName];
+
+      setUploadedFiles(prev => ({
+        ...prev,
+        [activeFilename]: {
+          headers: updatedHeaders,
+          rows: updatedRows,
+          types: updatedTypes
+        }
+      }));
+
+      setPreprocessSelectedCol(updatedHeaders[0] || '');
+      setPreprocessPreviewState(null);
+    };
+
+    const handleSaveProcessedDataset = () => {
+      if (!activeFilename || !uploadedFiles[activeFilename]) return;
+
+      let newFilename = activeFilename;
+      if (!newFilename.includes('_processed.csv')) {
+        newFilename = newFilename.replace('.csv', '') + '_processed.csv';
+      }
+
+      setUploadedFiles(prev => ({
+        ...prev,
+        [newFilename]: {
+          headers: [...headers],
+          rows: [...rows],
+          types: { ...types }
+        }
+      }));
+
+      setActiveFilename(newFilename);
+      alert(`데이터 가공 성공!\n새로운 데이터셋 [${newFilename}]이 생성되어 로드되었습니다.`);
+    };
+
+    const handlePreview = (toolType) => {
+      let previewRows = [];
+      let allRows = [];
+
+      if (toolType === 'imputer') {
+        const validVals = rows.map(r => r[colName]).filter(v => v !== null && v !== undefined && String(v).trim() !== '' && String(v).toLowerCase() !== 'null');
+        let fillVal = '';
+        if (prepImputerStrategy === 'most_frequent') {
+          const counts = {};
+          validVals.forEach(v => { counts[v] = (counts[v] || 0) + 1; });
+          let maxC = -1;
+          Object.entries(counts).forEach(([val, c]) => {
+            if (c > maxC) {
+              maxC = c;
+              fillVal = val;
+            }
+          });
+        } else if (prepImputerStrategy === 'mean' && isNumeric) {
+          const nums = validVals.map(Number);
+          fillVal = nums.length > 0 ? (nums.reduce((a,b)=>a+b, 0) / nums.length).toFixed(4) : '0';
+        } else if (prepImputerStrategy === 'median' && isNumeric) {
+          const nums = validVals.map(Number).sort((a,b)=>a-b);
+          if (nums.length > 0) {
+            const mid = Math.floor(nums.length / 2);
+            fillVal = nums.length % 2 === 1 ? nums[mid].toFixed(4) : ((nums[mid-1]+nums[mid])/2).toFixed(4);
+          } else {
+            fillVal = '0';
+          }
+        } else if (prepImputerStrategy === 'constant') {
+          fillVal = isNumeric ? '0' : 'missing';
+        }
+
+        // Find missing rows
+        rows.forEach((r, idx) => {
+          const val = r[colName];
+          const isMissing = val === null || val === undefined || String(val).trim() === '' || String(val).toLowerCase() === 'null';
+          if (isMissing) {
+            previewRows.push({
+              index: idx, // 0-based for internal, will render index + 1 or index
+              before: 'null',
+              after: fillVal
+            });
+          }
+        });
+
+        // If no missing rows, take first 10 rows and simulate imputation
+        if (previewRows.length === 0) {
+          rows.slice(0, 10).forEach((r, idx) => {
+            previewRows.push({
+              index: idx,
+              before: r[colName] || 'null',
+              after: r[colName] || fillVal
+            });
           });
         }
 
-        // 2. One-hot Encode (Let's detect object columns and encode top ones)
-        let processedHeaders = [...headers];
-        if (preprocessOneHot) {
-          const categoricalCols = headers.filter(h => {
-            const nonBlank = rows.map(r => r[h]).filter(v => v !== '');
-            return nonBlank.some(v => isNaN(Number(v)));
-          });
+        allRows = rows.map((r, idx) => {
+          const val = r[colName];
+          const isMissing = val === null || val === undefined || String(val).trim() === '' || String(val).toLowerCase() === 'null';
+          return {
+            index: idx,
+            value: isMissing ? fillVal : val
+          };
+        });
 
-          categoricalCols.forEach(col => {
-            // Find unique values
-            const uniqueVals = Array.from(new Set(rows.map(r => r[col]).filter(Boolean))).slice(0, 4); // limit 4 values
-            
-            // Add new headers
-            uniqueVals.forEach(val => {
-              const newHeader = `${col}_${val}`;
-              if (!processedHeaders.includes(newHeader)) {
-                processedHeaders.push(newHeader);
+        setPreprocessPreviewState({
+          toolName: '결측값 대체',
+          colName,
+          suffix: '_IM',
+          strategy: prepImputerStrategy,
+          rows: previewRows.slice(0, 15),
+          allRows
+        });
+
+      } else if (toolType === 'scaler') {
+        if (!isNumeric) return;
+        const numVals = rows.map(r => Number(r[colName])).filter(v => !isNaN(v));
+        if (numVals.length === 0) return;
+
+        const min = Math.min(...numVals);
+        const max = Math.max(...numVals);
+        const mean = numVals.reduce((a,b)=>a+b, 0) / numVals.length;
+        const sd = Math.sqrt(numVals.reduce((a,b)=>a+Math.pow(b-mean,2), 0) / numVals.length) || 1;
+
+        rows.slice(0, 15).forEach((r, idx) => {
+          const val = Number(r[colName]);
+          let scaled = val;
+          if (!isNaN(val)) {
+            if (prepScaleStrategy === 'Min-Max Scaler') {
+              scaled = max !== min ? (val - min) / (max - min) : 0;
+            } else {
+              scaled = (val - mean) / sd;
+            }
+          }
+          previewRows.push({
+            index: idx,
+            before: r[colName] || 'null',
+            after: scaled.toFixed(4)
+          });
+        });
+
+        allRows = rows.map((r, idx) => {
+          const val = Number(r[colName]);
+          let scaled = val;
+          if (!isNaN(val)) {
+            if (prepScaleStrategy === 'Min-Max Scaler') {
+              scaled = max !== min ? (val - min) / (max - min) : 0;
+            } else {
+              scaled = (val - mean) / sd;
+            }
+          }
+          return {
+            index: idx,
+            value: scaled.toFixed(4)
+          };
+        });
+
+        setPreprocessPreviewState({
+          toolName: 'Scale 조정',
+          colName,
+          suffix: '_SC',
+          strategy: prepScaleStrategy,
+          rows: previewRows,
+          allRows
+        });
+
+      } else if (toolType === 'transformer') {
+        if (isNumeric) {
+          const transTool = prepTransTool || 'quantile_transformer';
+          const numVals = rows.map(r => Number(r[colName])).filter(v => !isNaN(v));
+          if (numVals.length === 0) return;
+
+          if (transTool === 'quantile_transformer') {
+            const sorted = [...numVals].sort((a,b)=>a-b);
+            rows.slice(0, 15).forEach((r, idx) => {
+              const val = Number(r[colName]);
+              let transVal = 0.5;
+              if (!isNaN(val)) {
+                const rank = sorted.indexOf(val);
+                transVal = rank / Math.max(1, sorted.length - 1);
               }
+              previewRows.push({
+                index: idx,
+                before: r[colName] || 'null',
+                after: transVal.toFixed(4)
+              });
             });
 
-            // Update row cells
-            processedRows = processedRows.map(r => {
-              const updatedRow = { ...r };
-              const cellVal = r[col];
-              uniqueVals.forEach(val => {
-                updatedRow[`${col}_${val}`] = (cellVal === val) ? '1' : '0';
-              });
-              return updatedRow;
+            allRows = rows.map((r, idx) => {
+              const val = Number(r[colName]);
+              let transVal = 0.5;
+              if (!isNaN(val)) {
+                const rank = sorted.indexOf(val);
+                transVal = rank / Math.max(1, sorted.length - 1);
+              }
+              return {
+                index: idx,
+                value: transVal.toFixed(4)
+              };
             });
+          } else if (transTool === 'kbins_discretizer') {
+            const min = Math.min(...numVals);
+            const max = Math.max(...numVals);
+            const bins = prepNQuantiles || 10;
+            const binSize = (max - min) / bins;
+
+            rows.slice(0, 15).forEach((r, idx) => {
+              const val = Number(r[colName]);
+              let bin = 0;
+              if (!isNaN(val)) {
+                bin = Math.min(bins - 1, Math.floor((val - min) / Math.max(0.0001, binSize)));
+              }
+              previewRows.push({
+                index: idx,
+                before: r[colName] || 'null',
+                after: String(bin)
+              });
+            });
+
+            allRows = rows.map((r, idx) => {
+              const val = Number(r[colName]);
+              let bin = 0;
+              if (!isNaN(val)) {
+                bin = Math.min(bins - 1, Math.floor((val - min) / Math.max(0.0001, binSize)));
+              }
+              return {
+                index: idx,
+                value: String(bin)
+              };
+            });
+          } else {
+            // numeric_transformer
+            rows.slice(0, 15).forEach((r, idx) => {
+              const val = Number(r[colName]);
+              const transVal = !isNaN(val) ? Math.log1p(Math.abs(val)) : 0;
+              previewRows.push({
+                index: idx,
+                before: r[colName] || 'null',
+                after: transVal.toFixed(4)
+              });
+            });
+
+            allRows = rows.map((r, idx) => {
+              const val = Number(r[colName]);
+              const transVal = !isNaN(val) ? Math.log1p(Math.abs(val)) : 0;
+              return {
+                index: idx,
+                value: transVal.toFixed(4)
+              };
+            });
+          }
+
+          setPreprocessPreviewState({
+            toolName: '데이터 변환',
+            colName,
+            suffix: '_EN',
+            strategy: transTool,
+            rows: previewRows,
+            allRows
+          });
+        } else {
+          // Categorical Trans
+          const transTool = prepTransTool || 'ordinal_encoder';
+          const uniqueVals = Array.from(new Set(rows.map(r => r[colName]).filter(v => v !== null && v !== undefined && String(v).trim() !== '')));
+
+          rows.slice(0, 15).forEach((r, idx) => {
+            const val = r[colName];
+            let transVal = '';
+            if (transTool === 'ordinal_encoder') {
+              const code = uniqueVals.indexOf(val);
+              transVal = String(code >= 0 ? code : 0);
+            } else {
+              // One-hot dummy demo
+              transVal = val === uniqueVals[0] ? '1' : '0';
+            }
+            previewRows.push({
+              index: idx,
+              before: val || 'null',
+              after: transVal
+            });
+          });
+
+          allRows = rows.map((r, idx) => {
+            const val = r[colName];
+            let transVal = '';
+            if (transTool === 'ordinal_encoder') {
+              const code = uniqueVals.indexOf(val);
+              transVal = String(code >= 0 ? code : 0);
+            } else {
+              transVal = val === uniqueVals[0] ? '1' : '0';
+            }
+            return {
+              index: idx,
+              value: transVal
+            };
+          });
+
+          setPreprocessPreviewState({
+            toolName: '데이터 변환',
+            colName,
+            suffix: '_EN',
+            strategy: transTool,
+            rows: previewRows,
+            allRows
           });
         }
 
-        // 3. Standardization (StandardScaler for numeric columns)
-        if (preprocessScale) {
-          const numericCols = headers.filter(h => {
-            const nonBlank = rows.map(r => r[h]).filter(v => v !== '');
-            return nonBlank.length > 0 && nonBlank.every(v => !isNaN(Number(v)));
+      } else if (toolType === 'filter') {
+        rows.slice(0, 15).forEach((r, idx) => {
+          const val = r[colName];
+          const isMissing = val === null || val === undefined || String(val).trim() === '' || String(val).toLowerCase() === 'null';
+          previewRows.push({
+            index: idx,
+            before: val || 'null',
+            after: isMissing ? 'Filtered' : val
           });
+        });
 
-          numericCols.forEach(col => {
-            const vals = processedRows.map(r => Number(r[col])).filter(v => !isNaN(v));
-            if (vals.length > 0) {
-              const mean = vals.reduce((a, b) => a + b, 0) / vals.length;
-              const sd = Math.sqrt(vals.reduce((sum, v) => sum + Math.pow(v - mean, 2), 0) / vals.length) || 1;
-              
-              processedRows = processedRows.map(r => {
-                const updatedRow = { ...r };
-                const originalVal = Number(r[col]);
-                if (!isNaN(originalVal)) {
-                  updatedRow[col] = ((originalVal - mean) / sd).toFixed(4);
-                }
-                return updatedRow;
-              });
+        allRows = rows.map((r, idx) => {
+          const val = r[colName];
+          const isMissing = val === null || val === undefined || String(val).trim() === '' || String(val).toLowerCase() === 'null';
+          return {
+            index: idx,
+            value: isMissing ? '' : val
+          };
+        });
+
+        setPreprocessPreviewState({
+          toolName: '데이터 필터링',
+          colName,
+          suffix: '_FI',
+          strategy: 'missing_filter',
+          rows: previewRows,
+          allRows
+        });
+
+      } else if (toolType === 'regex') {
+        if (isNumeric) return;
+        let regex;
+        try {
+          regex = new RegExp(prepRegexPattern);
+        } catch (e) {
+          regex = /(.*)/;
+        }
+
+        rows.slice(0, 15).forEach((r, idx) => {
+          const val = String(r[colName] || '');
+          const match = val.match(regex);
+          const extracted = match ? (match[1] || match[0]) : '';
+          previewRows.push({
+            index: idx,
+            before: val,
+            after: extracted
+          });
+        });
+
+        allRows = rows.map((r, idx) => {
+          const val = String(r[colName] || '');
+          const match = val.match(regex);
+          return {
+            index: idx,
+            value: match ? (match[1] || match[0]) : ''
+          };
+        });
+
+        setPreprocessPreviewState({
+          toolName: 'Regex 추출',
+          colName,
+          suffix: '_RE',
+          strategy: prepRegexPattern,
+          rows: previewRows,
+          allRows
+        });
+
+      } else if (toolType === 'nlp') {
+        if (isNumeric) return;
+        rows.slice(0, 15).forEach((r, idx) => {
+          const val = String(r[colName] || '');
+          const tokens = val.split(/[\s_]+/).filter(Boolean).slice(0, 3).join(', ');
+          previewRows.push({
+            index: idx,
+            before: val,
+            after: tokens || 'None'
+          });
+        });
+
+        allRows = rows.map((r, idx) => {
+          const val = String(r[colName] || '');
+          const tokens = val.split(/[\s_]+/).filter(Boolean).slice(0, 3).join(', ');
+          return {
+            index: idx,
+            value: tokens
+          };
+        });
+
+        setPreprocessPreviewState({
+          toolName: '자연어 처리',
+          colName,
+          suffix: '_NLP',
+          strategy: '형태소 분석',
+          rows: previewRows,
+          allRows
+        });
+      }
+    };
+
+    const handleApplyPreprocess = () => {
+      if (!preprocessPreviewState) return;
+      const { suffix, allRows, toolName } = preprocessPreviewState;
+      const newColName = `${colName}${suffix}`;
+
+      let updatedHeaders = [...headers];
+      if (!updatedHeaders.includes(newColName)) {
+        const origIdx = updatedHeaders.indexOf(colName);
+        if (origIdx >= 0) {
+          updatedHeaders.splice(origIdx + 1, 0, newColName);
+        } else {
+          updatedHeaders.push(newColName);
+        }
+      }
+
+      const updatedRows = rows.map((r, idx) => {
+        const match = allRows.find(item => item.index === idx);
+        return {
+          ...r,
+          [newColName]: match ? match.value : r[colName]
+        };
+      });
+
+      const newColType = suffix === '_IM' || suffix === '_FI' || suffix === '_RE' || suffix === '_NLP'
+        ? (types?.[colName] || 'object')
+        : (suffix === '_SC' ? 'float64' : 'int64');
+
+      const updatedTypes = {
+        ...types,
+        [newColName]: newColType
+      };
+
+      setUploadedFiles(prev => ({
+        ...prev,
+        [activeFilename]: {
+          headers: updatedHeaders,
+          rows: updatedRows,
+          types: updatedTypes
+        }
+      }));
+
+      setPreprocessToast({
+        show: true,
+        message1: `${colName} 컬럼 결측치 처리가 완료되었습니다.`,
+        message2: `적용 시 ${newColName} 컬럼이 추가됩니다.`
+      });
+
+      setTimeout(() => {
+        setPreprocessToast(prev => ({ ...prev, show: false }));
+      }, 4000);
+    };
+
+    // 3. SVG Chart Render
+    const renderPreprocessChart = (chartStats, targetColName) => {
+      if (!chartStats) return null;
+
+      const width = 450;
+      const height = 150;
+      const paddingLeft = 50;
+      const paddingRight = 20;
+      const paddingTop = 15;
+      const paddingBottom = 25;
+
+      const chartWidth = width - paddingLeft - paddingRight;
+      const chartHeight = height - paddingTop - paddingBottom;
+
+      if (chartStats.isNumeric) {
+        const raw = chartStats.rawValues || [];
+        if (raw.length === 0) return null;
+
+        const min = Math.min(...raw);
+        const max = Math.max(...raw);
+        const binCount = 10;
+        const binWidth = (max - min) / binCount;
+        const bins = Array(binCount).fill(0);
+        const binLabels = [];
+
+        for (let i = 0; i < binCount; i++) {
+          const binMin = min + i * binWidth;
+          const binMax = min + (i + 1) * binWidth;
+          binLabels.push(`${binMin.toFixed(0)}`);
+
+          raw.forEach(v => {
+            if (i === binCount - 1) {
+              if (v >= binMin && v <= binMax) bins[i]++;
+            } else {
+              if (v >= binMin && v < binMax) bins[i]++;
             }
           });
         }
+        binLabels.push(`${max.toFixed(0)}`);
 
-        const newFilename = `${activeFilename.replace('.csv', '')}_processed.csv`;
-        setUploadedFiles(prev => ({
-          ...prev,
-          [newFilename]: { headers: processedHeaders, rows: processedRows }
-        }));
-        
-        setActiveFilename(newFilename);
-        setSelectedColumns([...processedHeaders]);
-        const N = processedRows.length;
-        setDataRangeStart(0);
-        setDataRangeEnd(N);
-        setVizRenderState({
-          type: 'heatmap',
-          columns: [...processedHeaders],
-          rangeEnd: N
-        });
-                setAnalysisResults(null);
-        setPreprocessStatus('가공 완료!');
-        
-        alert(`데이터 가공 성공!\n새로운 데이터셋 [${newFilename}]이 생성되어 로드되었습니다.`);
-        setAiduTab('describe'); // Switch back to Descriptive Stats!
-      }, 1000);
+        const maxBinVal = Math.max(...bins) || 1;
+        const barWidth = chartWidth / binCount;
+
+        return (
+          <div style={{ position: 'relative', width: '100%', height: '100%' }}>
+            {/* SVG Toolbar mock icons */}
+            <div style={{ position: 'absolute', top: 0, right: 10, display: 'flex', gap: '8px', opacity: 0.5 }}>
+              <span style={{ fontSize: '0.65rem', cursor: 'pointer' }}>📥</span>
+              <span style={{ fontSize: '0.65rem', cursor: 'pointer' }}>🖼️</span>
+              <span style={{ fontSize: '0.65rem', cursor: 'pointer' }}>🔍</span>
+            </div>
+            <svg width="100%" height="100%" viewBox={`0 0 ${width} ${height}`} style={{ overflow: 'visible' }}>
+              {/* Grid lines */}
+              {[0, 0.25, 0.5, 0.75, 1].map((ratio, idx) => {
+                const y = paddingTop + chartHeight * (1 - ratio);
+                const val = Math.round(maxBinVal * ratio);
+                return (
+                  <g key={idx}>
+                    <line x1={paddingLeft} y1={y} x2={width - paddingRight} y2={y} stroke="#f0f0f0" strokeDasharray="3,3" />
+                    <text x={paddingLeft - 8} y={y + 4} fontSize="8" fill="#999" textAnchor="end">{val}</text>
+                  </g>
+                );
+              })}
+
+              {/* Bars */}
+              {bins.map((count, idx) => {
+                const barHeight = (count / maxBinVal) * chartHeight;
+                const x = paddingLeft + idx * barWidth + 2;
+                const y = paddingTop + chartHeight - barHeight;
+                const w = barWidth - 4;
+                return (
+                  <g key={idx}>
+                    <rect
+                      x={x}
+                      y={y}
+                      width={w}
+                      height={barHeight}
+                      fill="#5c7cfa"
+                      rx="1"
+                      style={{ transition: 'all 0.3s', cursor: 'pointer' }}
+                      onMouseEnter={() => setHoveredBin({ index: idx, count, label: `${(min + idx * binWidth).toFixed(1)}~${(min + (idx + 1) * binWidth).toFixed(1)}` })}
+                      onMouseLeave={() => setHoveredBin(null)}
+                    />
+                    {hoveredBin?.index === idx && (
+                      <text x={x + w/2} y={y - 4} fontSize="8" fontWeight="bold" fill="#333" textAnchor="middle">{count}</text>
+                    )}
+                  </g>
+                );
+              })}
+
+              {/* X Axis Labels */}
+              {binLabels.map((lbl, idx) => {
+                if (idx % 2 !== 0 && idx !== binLabels.length - 1) return null;
+                const x = paddingLeft + (idx * (chartWidth / binCount));
+                return (
+                  <text key={idx} x={x} y={height - 5} fontSize="8" fill="#999" textAnchor="middle">{lbl}</text>
+                );
+              })}
+
+              {/* Axis title */}
+              <text x={paddingLeft + chartWidth / 2} y={height - 15} fontSize="9" fill="#555" textAnchor="middle" fontWeight="bold">{targetColName}</text>
+            </svg>
+          </div>
+        );
+      } else {
+        // Horizontal bar chart for categorical
+        const data = chartStats.sortedFreqs || [];
+        const maxCount = Math.max(...data.map(d => d.count)) || 1;
+        const barHeight = chartHeight / Math.max(1, data.length);
+
+        return (
+          <div style={{ position: 'relative', width: '100%', height: '100%' }}>
+            {/* SVG Toolbar mock icons */}
+            <div style={{ position: 'absolute', top: 0, right: 10, display: 'flex', gap: '8px', opacity: 0.5 }}>
+              <span style={{ fontSize: '0.65rem', cursor: 'pointer' }}>📥</span>
+              <span style={{ fontSize: '0.65rem', cursor: 'pointer' }}>🖼️</span>
+              <span style={{ fontSize: '0.65rem', cursor: 'pointer' }}>🔍</span>
+            </div>
+            <svg width="100%" height="100%" viewBox={`0 0 ${width} ${height}`} style={{ overflow: 'visible' }}>
+              {/* Grid lines (vertical) */}
+              {[0, 0.25, 0.5, 0.75, 1].map((ratio, idx) => {
+                const x = paddingLeft + chartWidth * ratio;
+                const val = Math.round(maxCount * ratio);
+                return (
+                  <g key={idx}>
+                    <line x1={x} y1={paddingTop} x2={x} y2={height - paddingBottom} stroke="#f0f0f0" strokeDasharray="3,3" />
+                    <text x={x} y={height - 12} fontSize="8" fill="#999" textAnchor="middle">{val}</text>
+                  </g>
+                );
+              })}
+
+              {/* Bars */}
+              {data.map((item, idx) => {
+                const barWidth = (item.count / maxCount) * chartWidth;
+                const x = paddingLeft;
+                const y = paddingTop + idx * barHeight + 3;
+                const h = barHeight - 6;
+                return (
+                  <g key={idx}>
+                    <text x={paddingLeft - 8} y={y + h/2 + 3} fontSize="8" fill="#555" textAnchor="end" fontWeight="bold">
+                      {item.val.length > 8 ? item.val.slice(0, 7) + '..' : item.val}
+                    </text>
+
+                    <rect
+                      x={x}
+                      y={y}
+                      width={barWidth}
+                      height={h}
+                      fill="#7048e8"
+                      rx="1"
+                      style={{ transition: 'all 0.3s' }}
+                    />
+
+                    <text x={x + barWidth + 5} y={y + h/2 + 3} fontSize="8" fill="#777">{item.count}</text>
+                  </g>
+                );
+              })}
+
+              {/* Axis title */}
+              <text x={paddingLeft + chartWidth / 2} y={height - 2} fontSize="9" fill="#555" textAnchor="middle" fontWeight="bold">count</text>
+            </svg>
+          </div>
+        );
+      }
     };
 
     return (
-      <div style={{ display: 'flex', width: '100%', height: '100%', overflow: 'hidden' }}>
-        <div className="aidu-settings-panel">
-          <div className="form-group">
-            <label style={{ fontSize: '0.8rem', fontWeight: 'bold' }}>가공 도구 선택</label>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', marginTop: '0.25rem' }}>
-              <label style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.75rem', cursor: 'pointer' }}>
-                <input type="checkbox" checked={preprocessDropNa} onChange={(e) => setPreprocessDropNa(e.target.checked)} />
-                결측값 제거 (Drop NaN)
-              </label>
-              <label style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.75rem', cursor: 'pointer' }}>
-                <input type="checkbox" checked={preprocessOneHot} onChange={(e) => setPreprocessOneHot(e.target.checked)} />
-                원핫 인코딩 (One-Hot)
-              </label>
-              <label style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.75rem', cursor: 'pointer' }}>
-                <input type="checkbox" checked={preprocessScale} onChange={(e) => setPreprocessScale(e.target.checked)} />
-                표준화 (StandardScaler)
-              </label>
+      <div style={{ display: 'flex', width: '100%', height: '100%', overflow: 'hidden', position: 'relative', backgroundColor: '#f8f9fa' }}>
+        {/* Floating Toast Notification */}
+        {preprocessToast.show && (
+          <div style={{
+            position: 'absolute',
+            top: '20px',
+            right: '20px',
+            backgroundColor: '#0f59f4',
+            color: 'white',
+            padding: '12px 20px',
+            borderRadius: '6px',
+            boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+            zIndex: 9999,
+            display: 'flex',
+            alignItems: 'flex-start',
+            gap: '10px',
+            minWidth: '280px',
+            maxWidth: '350px',
+            fontSize: '0.8rem',
+            animation: 'fadeIn 0.3s'
+          }}>
+            <AlertCircle size={16} style={{ marginTop: '2px', flexShrink: 0 }} />
+            <div style={{ flex: 1 }}>
+              <div style={{ fontWeight: 'bold' }}>{preprocessToast.message1}</div>
+              <div style={{ opacity: 0.9, marginTop: '2px', fontSize: '0.75rem' }}>{preprocessToast.message2}</div>
+            </div>
+            <button
+              onClick={() => setPreprocessToast({ show: false, message1: '', message2: '' })}
+              style={{ background: 'none', border: 'none', color: 'white', cursor: 'pointer', opacity: 0.8, padding: 0, fontSize: '1rem', lineHeight: 1 }}
+            >
+              &times;
+            </button>
+          </div>
+        )}
+
+        {/* 1열: 가공 설정 (Left Settings Panel) */}
+        <div style={{ width: '260px', borderRight: '1px solid #e2e8f0', padding: '16px', display: 'flex', flexDirection: 'column', gap: '16px', backgroundColor: 'white', flexShrink: 0 }}>
+          <h3 style={{ fontSize: '0.9rem', fontWeight: 'bold', margin: 0, color: '#1e293b' }}>가공 설정</h3>
+
+          <div className="form-group" style={{ margin: 0 }}>
+            <label style={{ fontSize: '0.8rem', fontWeight: 'bold', display: 'block', marginBottom: '6px', color: '#475569' }}>작업 데이터 선택</label>
+            <select
+              className="form-control"
+              style={{ fontSize: '0.8rem', padding: '6px 8px', borderRadius: '4px', border: '1px solid #cbd5e1', width: '100%', backgroundColor: 'white' }}
+              value={activeFilename}
+              onChange={handleFileChange}
+            >
+              {Object.keys(uploadedFiles).map(fn => (
+                <option key={fn} value={fn}>{fn}</option>
+              ))}
+            </select>
+          </div>
+
+          <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+              <label style={{ fontSize: '0.8rem', fontWeight: 'bold', margin: 0, color: '#475569' }}>컬럼 선택</label>
+              <button
+                type="button"
+                onClick={handleDeleteColumn}
+                disabled={!colName}
+                style={{ background: 'none', border: 'none', color: '#ef4444', cursor: colName ? 'pointer' : 'not-allowed', padding: '2px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                title="컬럼 삭제"
+              >
+                <Trash2 size={15} />
+              </button>
+            </div>
+
+            <div style={{ flex: 1, overflowY: 'auto', border: '1px solid #e2e8f0', borderRadius: '4px', padding: '8px', display: 'flex', flexDirection: 'column', gap: '6px', backgroundColor: '#f8fafc' }}>
+              {headers.map(h => {
+                const isSelected = h === colName;
+                const type = types?.[h] || 'object';
+                let badgeBg = '#f1f5f9';
+                let badgeColor = '#475569';
+
+                if (type === 'object') {
+                  badgeBg = '#e0f2fe';
+                  badgeColor = '#0284c7';
+                } else if (type === 'int64') {
+                  badgeBg = '#dcfce7';
+                  badgeColor = '#16a34a';
+                } else if (type === 'float64') {
+                  badgeBg = '#fef3c7';
+                  badgeColor = '#d97706';
+                }
+
+                return (
+                  <div
+                    key={h}
+                    onClick={() => {
+                      setPreprocessSelectedCol(h);
+                      setPreprocessPreviewState(null);
+                    }}
+                    style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      padding: '8px 10px',
+                      borderRadius: '4px',
+                      cursor: 'pointer',
+                      border: isSelected ? '1px solid #3b82f6' : '1px solid #e2e8f0',
+                      backgroundColor: isSelected ? '#eff6ff' : 'white',
+                      transition: 'all 0.2s',
+                    }}
+                  >
+                    <span style={{ fontSize: '0.75rem', fontWeight: isSelected ? 'bold' : 'normal', color: isSelected ? '#1d4ed8' : '#1e293b', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '140px' }}>
+                      {h}
+                    </span>
+                    <span style={{ fontSize: '0.65rem', padding: '2px 6px', borderRadius: '4px', backgroundColor: badgeBg, color: badgeColor, fontWeight: '500' }}>
+                      {type}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.7rem', color: '#64748b', marginTop: '6px', padding: '0 4px' }}>
+              <span>총 {headers.length}</span>
+              <span>최소 1 / 최대 1</span>
             </div>
           </div>
 
-          <button 
-            type="button" 
-            className="btn btn-primary btn-full" 
-            style={{ fontSize: '0.85rem' }} 
-            onClick={handleRunPreprocess}
-            disabled={!preprocessDropNa && !preprocessOneHot && !preprocessScale}
+          <button
+            type="button"
+            className="btn btn-primary btn-full"
+            onClick={handleSaveProcessedDataset}
+            style={{ fontSize: '0.8rem', padding: '10px 0', borderRadius: '4px', fontWeight: 'bold' }}
           >
-            {preprocessStatus || '가공 실행하기'}
+            가공데이터 저장
           </button>
         </div>
 
-        <div className="aidu-results-panel">
-          <div className="aidu-card">
-            <div className="aidu-card-header">데이터 전처리 (Preprocessing) 가이드</div>
-            <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', lineHeight: '1.6' }}>
-              기계 학습 성능을 최대화하기 위해 데이터를 분석에 적합하도록 포맷을 맞추는 전처리 과정입니다.<br /><br />
-              - <strong>결측값 제거</strong>: 값이 비어 있는(Null) 행들을 일괄 탈락 처리합니다.<br />
-              - <strong>원핫 인코딩</strong>: 문자열 범주형(object) 변수를 바이너리(0 또는 1) 원핫 컬럼 피처들로 자동 생성 변환합니다.<br />
-              - <strong>표준화 (StandardScaler)</strong>: 수치 변수들의 값 범위를 평균 0, 표준편차 1을 갖는 표준정규분포로 스케일링합니다.
-            </p>
+        {/* 2열: 가공 도구 (Center Preprocessing Workspace) */}
+        <div style={{ width: '270px', borderRight: '1px solid #e2e8f0', padding: '16px', display: 'flex', flexDirection: 'column', gap: '16px', backgroundColor: 'white', flexShrink: 0, overflowY: 'auto' }}>
+          <h3 style={{ fontSize: '0.9rem', fontWeight: 'bold', margin: 0, color: '#1e293b' }}>가공 도구</h3>
+
+          {/* Conditional Tool Options card rendering */}
+          {isNumeric ? (
+            // Numeric Preprocessing Workspace
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              {/* 결측값 대체 */}
+              <div style={{ border: '1px solid #e2e8f0', borderRadius: '6px', padding: '12px', backgroundColor: 'white' }}>
+                <div style={{ fontSize: '0.8rem', fontWeight: 'bold', marginBottom: '8px', color: '#1e293b' }}>결측값 대체</div>
+                <select
+                  style={{ width: '100%', fontSize: '0.75rem', padding: '4px 8px', borderRadius: '4px', border: '1px solid #cbd5e1', backgroundColor: '#f8fafc', marginBottom: '8px' }}
+                  value={prepImputerTool}
+                  onChange={(e) => setPrepImputerTool(e.target.value)}
+                >
+                  <option value="basic_imputer">basic_imputer</option>
+                </select>
+                <div style={{ fontSize: '0.7rem', color: '#475569', marginBottom: '4px' }}>strategy</div>
+                <select
+                  style={{ width: '100%', fontSize: '0.75rem', padding: '4px 8px', borderRadius: '4px', border: '1px solid #cbd5e1', backgroundColor: 'white', marginBottom: '12px' }}
+                  value={prepImputerStrategy}
+                  onChange={(e) => setPrepImputerStrategy(e.target.value)}
+                >
+                  <option value="most_frequent">most_frequent</option>
+                  <option value="median">median</option>
+                  <option value="mean">mean</option>
+                  <option value="constant">constant</option>
+                </select>
+                <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                  <button
+                    type="button"
+                    onClick={() => handlePreview('imputer')}
+                    style={{ border: '1px solid #3b82f6', color: '#3b82f6', background: 'white', borderRadius: '4px', padding: '2px 14px', fontSize: '0.75rem', fontWeight: '500', cursor: 'pointer' }}
+                  >
+                    보기
+                  </button>
+                </div>
+              </div>
+
+              {/* Scale 조정 */}
+              <div style={{ border: '1px solid #e2e8f0', borderRadius: '6px', padding: '12px', backgroundColor: 'white' }}>
+                <div style={{ fontSize: '0.8rem', fontWeight: 'bold', marginBottom: '8px', color: '#1e293b' }}>Scale 조정</div>
+                <select
+                  style={{ width: '100%', fontSize: '0.75rem', padding: '4px 8px', borderRadius: '4px', border: '1px solid #cbd5e1', backgroundColor: '#f8fafc', marginBottom: '8px' }}
+                  value={prepScaleTool}
+                  onChange={(e) => setPrepScaleTool(e.target.value)}
+                >
+                  <option value="basic_scaler">basic_scaler</option>
+                </select>
+                <div style={{ fontSize: '0.7rem', color: '#475569', marginBottom: '4px' }}>strategy</div>
+                <select
+                  style={{ width: '100%', fontSize: '0.75rem', padding: '4px 8px', borderRadius: '4px', border: '1px solid #cbd5e1', backgroundColor: 'white', marginBottom: '12px' }}
+                  value={prepScaleStrategy}
+                  onChange={(e) => setPrepScaleStrategy(e.target.value)}
+                >
+                  <option value="Min-Max Scaler">Min-Max Scaler</option>
+                  <option value="Standard Scaler">Standard Scaler</option>
+                </select>
+                <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                  <button
+                    type="button"
+                    onClick={() => handlePreview('scaler')}
+                    style={{ border: '1px solid #3b82f6', color: '#3b82f6', background: 'white', borderRadius: '4px', padding: '2px 14px', fontSize: '0.75rem', fontWeight: '500', cursor: 'pointer' }}
+                  >
+                    보기
+                  </button>
+                </div>
+              </div>
+
+              {/* 데이터 변환 */}
+              <div style={{ border: '1px solid #e2e8f0', borderRadius: '6px', padding: '12px', backgroundColor: 'white' }}>
+                <div style={{ fontSize: '0.8rem', fontWeight: 'bold', marginBottom: '8px', color: '#1e293b' }}>데이터 변환</div>
+                <select
+                  style={{ width: '100%', fontSize: '0.75rem', padding: '4px 8px', borderRadius: '4px', border: '1px solid #cbd5e1', backgroundColor: 'white', marginBottom: '8px' }}
+                  value={prepTransTool || 'quantile_transformer'}
+                  onChange={(e) => setPrepTransTool(e.target.value)}
+                >
+                  <option value="quantile_transformer">quantile_transformer</option>
+                  <option value="numeric_transformer">numeric_transformer</option>
+                  <option value="kbins_discretizer">kbins_discretizer</option>
+                </select>
+
+                {(prepTransTool === 'quantile_transformer' || !prepTransTool) && (
+                  <>
+                    <div style={{ fontSize: '0.7rem', color: '#475569', marginBottom: '4px' }}>strategy</div>
+                    <select
+                      style={{ width: '100%', fontSize: '0.75rem', padding: '4px 8px', borderRadius: '4px', border: '1px solid #cbd5e1', backgroundColor: 'white', marginBottom: '8px' }}
+                      value={prepTransStrategy}
+                      onChange={(e) => setPrepTransStrategy(e.target.value)}
+                    >
+                      <option value="uniform">uniform</option>
+                      <option value="normal">normal</option>
+                    </select>
+                    <div style={{ fontSize: '0.7rem', color: '#475569', marginBottom: '4px' }}>n_quantiles</div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
+                      <input
+                        type="range"
+                        min="10"
+                        max="1000"
+                        style={{ flex: 1 }}
+                        value={prepNQuantiles}
+                        onChange={(e) => setPrepNQuantiles(Number(e.target.value))}
+                      />
+                      <span style={{ fontSize: '0.7rem', color: '#475569', width: '30px', textAlign: 'right' }}>{prepNQuantiles}</span>
+                    </div>
+                  </>
+                )}
+
+                {prepTransTool === 'kbins_discretizer' && (
+                  <>
+                    <div style={{ fontSize: '0.7rem', color: '#475569', marginBottom: '4px' }}>n_bins</div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
+                      <input
+                        type="range"
+                        min="2"
+                        max="20"
+                        style={{ flex: 1 }}
+                        value={prepNQuantiles}
+                        onChange={(e) => setPrepNQuantiles(Number(e.target.value))}
+                      />
+                      <span style={{ fontSize: '0.7rem', color: '#475569', width: '20px', textAlign: 'right' }}>{prepNQuantiles}</span>
+                    </div>
+                  </>
+                )}
+
+                <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                  <button
+                    type="button"
+                    onClick={() => handlePreview('transformer')}
+                    style={{ border: '1px solid #3b82f6', color: '#3b82f6', background: 'white', borderRadius: '4px', padding: '2px 14px', fontSize: '0.75rem', fontWeight: '500', cursor: 'pointer' }}
+                  >
+                    보기
+                  </button>
+                </div>
+              </div>
+
+              {/* 데이터 필터링 */}
+              <div style={{ border: '1px solid #e2e8f0', borderRadius: '6px', padding: '12px', backgroundColor: 'white' }}>
+                <div style={{ fontSize: '0.8rem', fontWeight: 'bold', marginBottom: '8px', color: '#1e293b' }}>데이터 필터링 <span style={{ color: '#94a3b8', cursor: 'help' }} title="결측값이 들어 있는 레코드를 조건별로 필터링합니다.">?</span></div>
+                <select
+                  style={{ width: '100%', fontSize: '0.75rem', padding: '4px 8px', borderRadius: '4px', border: '1px solid #cbd5e1', backgroundColor: '#f8fafc', marginBottom: '12px' }}
+                  value={prepFilterTool}
+                  onChange={(e) => setPrepFilterTool(e.target.value)}
+                >
+                  <option value="missing_filter">missing_filter</option>
+                </select>
+                <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                  <button
+                    type="button"
+                    onClick={() => handlePreview('filter')}
+                    style={{ border: '1px solid #3b82f6', color: '#3b82f6', background: 'white', borderRadius: '4px', padding: '2px 14px', fontSize: '0.75rem', fontWeight: '500', cursor: 'pointer' }}
+                  >
+                    보기
+                  </button>
+                </div>
+              </div>
+            </div>
+          ) : (
+            // Categorical Preprocessing Workspace
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              {/* 결측값 대체 */}
+              <div style={{ border: '1px solid #e2e8f0', borderRadius: '6px', padding: '12px', backgroundColor: 'white' }}>
+                <div style={{ fontSize: '0.8rem', fontWeight: 'bold', marginBottom: '8px', color: '#1e293b' }}>결측값 대체</div>
+                <select
+                  style={{ width: '100%', fontSize: '0.75rem', padding: '4px 8px', borderRadius: '4px', border: '1px solid #cbd5e1', backgroundColor: '#f8fafc', marginBottom: '8px' }}
+                  value={prepImputerTool}
+                  onChange={(e) => setPrepImputerTool(e.target.value)}
+                >
+                  <option value="basic_imputer">basic_imputer</option>
+                </select>
+                <div style={{ fontSize: '0.7rem', color: '#475569', marginBottom: '4px' }}>strategy</div>
+                <select
+                  style={{ width: '100%', fontSize: '0.75rem', padding: '4px 8px', borderRadius: '4px', border: '1px solid #cbd5e1', backgroundColor: 'white', marginBottom: '12px' }}
+                  value={prepImputerStrategy}
+                  onChange={(e) => setPrepImputerStrategy(e.target.value)}
+                >
+                  <option value="most_frequent">most_frequent</option>
+                  <option value="constant">constant</option>
+                </select>
+                <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                  <button
+                    type="button"
+                    onClick={() => handlePreview('imputer')}
+                    style={{ border: '1px solid #3b82f6', color: '#3b82f6', background: 'white', borderRadius: '4px', padding: '2px 14px', fontSize: '0.75rem', fontWeight: '500', cursor: 'pointer' }}
+                  >
+                    보기
+                  </button>
+                </div>
+              </div>
+
+              {/* 데이터 변환 */}
+              <div style={{ border: '1px solid #e2e8f0', borderRadius: '6px', padding: '12px', backgroundColor: 'white' }}>
+                <div style={{ fontSize: '0.8rem', fontWeight: 'bold', marginBottom: '8px', color: '#1e293b' }}>데이터 변환</div>
+                <select
+                  style={{ width: '100%', fontSize: '0.75rem', padding: '4px 8px', borderRadius: '4px', border: '1px solid #cbd5e1', backgroundColor: 'white', marginBottom: '12px' }}
+                  value={prepTransTool || 'ordinal_encoder'}
+                  onChange={(e) => setPrepTransTool(e.target.value)}
+                >
+                  <option value="ordinal_encoder">ordinal_encoder</option>
+                  <option value="onehot_encoder">onehot_encoder</option>
+                </select>
+                <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                  <button
+                    type="button"
+                    onClick={() => handlePreview('transformer')}
+                    style={{ border: '1px solid #3b82f6', color: '#3b82f6', background: 'white', borderRadius: '4px', padding: '2px 14px', fontSize: '0.75rem', fontWeight: '500', cursor: 'pointer' }}
+                  >
+                    보기
+                  </button>
+                </div>
+              </div>
+
+              {/* 데이터 필터링 */}
+              <div style={{ border: '1px solid #e2e8f0', borderRadius: '6px', padding: '12px', backgroundColor: 'white' }}>
+                <div style={{ fontSize: '0.8rem', fontWeight: 'bold', marginBottom: '8px', color: '#1e293b' }}>데이터 필터링 <span style={{ color: '#94a3b8', cursor: 'help' }} title="결측값이 들어 있는 레코드를 조건별로 필터링합니다.">?</span></div>
+                <select
+                  style={{ width: '100%', fontSize: '0.75rem', padding: '4px 8px', borderRadius: '4px', border: '1px solid #cbd5e1', backgroundColor: '#f8fafc', marginBottom: '12px' }}
+                  value={prepFilterTool}
+                  onChange={(e) => setPrepFilterTool(e.target.value)}
+                >
+                  <option value="missing_filter">missing_filter</option>
+                </select>
+                <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                  <button
+                    type="button"
+                    onClick={() => handlePreview('filter')}
+                    style={{ border: '1px solid #3b82f6', color: '#3b82f6', background: 'white', borderRadius: '4px', padding: '2px 14px', fontSize: '0.75rem', fontWeight: '500', cursor: 'pointer' }}
+                  >
+                    보기
+                  </button>
+                </div>
+              </div>
+
+              {/* Regex 추출 */}
+              <div style={{ border: '1px solid #e2e8f0', borderRadius: '6px', padding: '12px', backgroundColor: 'white' }}>
+                <div style={{ fontSize: '0.8rem', fontWeight: 'bold', marginBottom: '8px', color: '#1e293b' }}>Regex 추출</div>
+                <select
+                  style={{ width: '100%', fontSize: '0.75rem', padding: '4px 8px', borderRadius: '4px', border: '1px solid #cbd5e1', backgroundColor: '#f8fafc', marginBottom: '8px' }}
+                  value={prepRegexTool}
+                  onChange={(e) => setPrepRegexTool(e.target.value)}
+                >
+                  <option value="Regex">Regex</option>
+                </select>
+                <div style={{ fontSize: '0.7rem', color: '#475569', marginBottom: '4px' }}>patterns</div>
+                <input
+                  type="text"
+                  style={{ width: '100%', fontSize: '0.75rem', padding: '4px 8px', borderRadius: '4px', border: '1px solid #cbd5e1', backgroundColor: 'white', marginBottom: '12px' }}
+                  value={prepRegexPattern}
+                  onChange={(e) => setPrepRegexPattern(e.target.value)}
+                />
+                <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                  <button
+                    type="button"
+                    onClick={() => handlePreview('regex')}
+                    style={{ border: '1px solid #3b82f6', color: '#3b82f6', background: 'white', borderRadius: '4px', padding: '2px 14px', fontSize: '0.75rem', fontWeight: '500', cursor: 'pointer' }}
+                  >
+                    보기
+                  </button>
+                </div>
+              </div>
+
+              {/* 자연어 처리 */}
+              <div style={{ border: '1px solid #e2e8f0', borderRadius: '6px', padding: '12px', backgroundColor: 'white' }}>
+                <div style={{ fontSize: '0.8rem', fontWeight: 'bold', marginBottom: '8px', color: '#1e293b' }}>자연어 처리</div>
+                <select
+                  style={{ width: '100%', fontSize: '0.75rem', padding: '4px 8px', borderRadius: '4px', border: '1px solid #cbd5e1', backgroundColor: '#f8fafc', marginBottom: '8px' }}
+                  value={prepNlpTool}
+                  onChange={(e) => setPrepNlpTool(e.target.value)}
+                >
+                  <option value="pecab">pecab</option>
+                </select>
+                <div style={{ fontSize: '0.7rem', color: '#475569', marginBottom: '4px' }}>strategy</div>
+                <select
+                  style={{ width: '100%', fontSize: '0.75rem', padding: '4px 8px', borderRadius: '4px', border: '1px solid #cbd5e1', backgroundColor: 'white', marginBottom: '12px' }}
+                  value={prepNlpStrategy}
+                  onChange={(e) => setPrepNlpStrategy(e.target.value)}
+                >
+                  <option value="형태소 분석">형태소 분석</option>
+                </select>
+                <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                  <button
+                    type="button"
+                    onClick={() => handlePreview('nlp')}
+                    style={{ border: '1px solid #3b82f6', color: '#3b82f6', background: 'white', borderRadius: '4px', padding: '2px 14px', fontSize: '0.75rem', fontWeight: '500', cursor: 'pointer' }}
+                  >
+                    보기
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* 3열: 가공 결과 & 시각화 워크스페이스 (Right Panel) */}
+        <div style={{ flex: 1, padding: '16px', display: 'flex', flexDirection: 'column', gap: '16px', minWidth: 0, overflowY: 'auto' }}>
+          
+          {/* 상단: 통계 정보 및 차트 */}
+          <div style={{ border: '1px solid #e2e8f0', borderRadius: '8px', padding: '16px', backgroundColor: 'white' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
+              <span style={{ fontSize: '0.9rem', fontWeight: 'bold', color: '#1e293b' }}>동계 정보</span>
+              <span style={{ fontSize: '0.7rem', padding: '2px 8px', borderRadius: '4px', backgroundColor: '#eff6ff', color: '#2563eb', fontWeight: 'bold' }}>
+                대상 컬럼: {colName}
+              </span>
+            </div>
+
+            {stats ? (
+              <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-start', flexWrap: 'nowrap', overflowX: 'auto', width: '100%' }}>
+                {stats.isNumeric ? (
+                  <>
+                    {/* 1-1) 기술통계 표 Left (헤더 1 + 데이터 7 = 8행) */}
+                    <div style={{ flex: '1 1 0px', minWidth: '125px' }}>
+                      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.7rem', border: '1px solid #cbd5e1', backgroundColor: 'white', borderRadius: '4px', overflow: 'hidden' }}>
+                        <thead>
+                          <tr style={{ backgroundColor: '#f1f5f9', borderBottom: '1px solid #cbd5e1' }}>
+                            <th style={{ height: '25px', padding: '0 8px', textAlign: 'left', fontWeight: 'bold', color: '#475569', fontSize: '0.68rem' }}>기술통계</th>
+                            <th style={{ height: '25px', padding: '0 8px', textAlign: 'right', fontWeight: 'bold', color: '#475569', fontSize: '0.68rem' }}>값</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {[
+                            { label: 'size', val: stats.size?.toLocaleString() },
+                            { label: 'distinct', val: stats.distinct?.toLocaleString() },
+                            { label: 'distinct(%)', val: stats.distinctPercent },
+                            { label: 'missing', val: stats.missing?.toLocaleString() },
+                            { label: 'missing(%)', val: stats.missingPercent },
+                            { label: 'zeros', val: stats.zeros?.toLocaleString() },
+                            { label: 'zeros(%)', val: stats.zerosPercent }
+                          ].map((row, idx) => (
+                            <tr key={idx} style={{ borderBottom: idx === 6 ? 'none' : '1px solid #e2e8f0' }}>
+                              <td style={{ height: '25px', padding: '0 8px', color: '#475569' }}>{row.label}</td>
+                              <td style={{ height: '25px', padding: '0 8px', textAlign: 'right', fontWeight: 'bold' }}>{row.val}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+
+                    {/* 1-2) 기술통계 표 Right (헤더 1 + 데이터 7 = 8행) */}
+                    <div style={{ flex: '1 1 0px', minWidth: '125px' }}>
+                      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.7rem', border: '1px solid #cbd5e1', backgroundColor: 'white', borderRadius: '4px', overflow: 'hidden' }}>
+                        <thead>
+                          <tr style={{ backgroundColor: '#f1f5f9', borderBottom: '1px solid #cbd5e1' }}>
+                            <th style={{ height: '25px', padding: '0 8px', textAlign: 'left', fontWeight: 'bold', color: '#475569', fontSize: '0.68rem' }}>항목</th>
+                            <th style={{ height: '25px', padding: '0 8px', textAlign: 'right', fontWeight: 'bold', color: '#475569', fontSize: '0.68rem' }}>값</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {[
+                            { label: 'mean', val: stats.mean },
+                            { label: 'median', val: stats.median },
+                            { label: 'sum', val: Number(stats.sum || 0).toLocaleString() },
+                            { label: 'sd', val: stats.sd },
+                            { label: 'skewness', val: stats.skewness },
+                            { label: 'minimum', val: stats.minimum },
+                            { label: 'maximum', val: stats.maximum }
+                          ].map((row, idx) => (
+                            <tr key={idx} style={{ borderBottom: idx === 6 ? 'none' : '1px solid #e2e8f0' }}>
+                              <td style={{ height: '25px', padding: '0 8px', color: '#475569' }}>{row.label}</td>
+                              <td style={{ height: '25px', padding: '0 8px', textAlign: 'right', fontWeight: 'bold' }}>{row.val}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+
+                    {/* 2) 분위수 표 (헤더 1 + 데이터 7 = 8행) */}
+                    {stats.quantiles && (
+                      <div style={{ flex: '1 1 0px', minWidth: '125px' }}>
+                        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.7rem', border: '1px solid #cbd5e1', backgroundColor: 'white', borderRadius: '4px', overflow: 'hidden' }}>
+                          <thead>
+                            <tr style={{ backgroundColor: '#f1f5f9', borderBottom: '1px solid #cbd5e1' }}>
+                              <th style={{ height: '25px', padding: '0 8px', textAlign: 'left', fontWeight: 'bold', color: '#475569', fontSize: '0.68rem' }}>분위수</th>
+                              <th style={{ height: '25px', padding: '0 8px', textAlign: 'right', fontWeight: 'bold', color: '#475569', fontSize: '0.68rem' }}>값</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {[
+                              { label: 'min', val: stats.quantiles.min },
+                              { label: '5th_per', val: stats.quantiles.p5 },
+                              { label: 'q1', val: stats.quantiles.q1 },
+                              { label: 'median', val: stats.quantiles.median },
+                              { label: 'q3', val: stats.quantiles.q3 },
+                              { label: '95th_per', val: stats.quantiles.p95 },
+                              { label: 'max', val: stats.quantiles.max }
+                            ].map((row, idx) => (
+                              <tr key={idx} style={{ borderBottom: idx === 6 ? 'none' : '1px solid #e2e8f0' }}>
+                                <td style={{ height: '25px', padding: '0 8px', color: '#475569' }}>{row.label}</td>
+                                <td style={{ height: '25px', padding: '0 8px', textAlign: 'right', fontWeight: 'bold' }}>{row.val}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+
+                    {/* 3) 최빈값 (상위 5개) 표 (헤더 1 + 데이터 7 = 8행으로 패딩) */}
+                    <div style={{ flex: '1.2 1 0px', minWidth: '170px' }}>
+                      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.7rem', border: '1px solid #cbd5e1', backgroundColor: 'white', borderRadius: '4px', overflow: 'hidden' }}>
+                        <thead>
+                          <tr style={{ backgroundColor: '#f1f5f9', borderBottom: '1px solid #cbd5e1' }}>
+                            <th style={{ height: '25px', padding: '0 8px', textAlign: 'left', fontWeight: 'bold', color: '#475569', fontSize: '0.68rem' }}>최빈값 (상위 5개)</th>
+                            <th style={{ height: '25px', padding: '0 8px', textAlign: 'right', fontWeight: 'bold', color: '#475569', fontSize: '0.68rem' }}>빈도</th>
+                            <th style={{ height: '25px', padding: '0 8px', textAlign: 'right', fontWeight: 'bold', color: '#475569', fontSize: '0.68rem' }}>비율</th>
+                            <th style={{ height: '25px', padding: '0 4px', textAlign: 'center', width: '20px', color: '#475569' }}>🔍</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {(() => {
+                            const freqData = stats.sortedFreqs || [];
+                            const padded = [...freqData];
+                            while (padded.length < 7) {
+                              padded.push({ val: '', count: '', percent: '', isEmpty: true });
+                            }
+                            return padded.map((item, idx) => (
+                              <tr key={idx} style={{ borderBottom: idx === 6 ? 'none' : '1px solid #e2e8f0' }}>
+                                <td style={{ height: '25px', padding: '0 8px', color: '#1e293b', fontWeight: item.isEmpty ? 'normal' : 'bold', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '80px' }} title={item.val}>
+                                  {item.isEmpty ? '\u00A0' : item.val}
+                                </td>
+                                <td style={{ height: '25px', padding: '0 8px', textAlign: 'right', color: '#475569' }}>
+                                  {item.isEmpty ? '\u00A0' : item.count?.toLocaleString()}
+                                </td>
+                                <td style={{ height: '25px', padding: '0 8px', textAlign: 'right', color: '#475569' }}>
+                                  {item.isEmpty ? '\u00A0' : `${item.percent}%`}
+                                </td>
+                                <td style={{ height: '25px', padding: '0 4px', textAlign: 'center', color: '#94a3b8' }}></td>
+                              </tr>
+                            ));
+                          })()}
+                        </tbody>
+                      </table>
+                    </div>
+
+                    {/* 4) SVG Chart */}
+                    <div style={{ flex: '1.8 1 0px', height: '200px', minWidth: '260px', border: '1px solid #cbd5e1', borderRadius: '4px', padding: '4px', backgroundColor: 'white', display: 'flex', alignItems: 'center' }}>
+                      {renderPreprocessChart(stats, colName)}
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    {/* 범주형 컬럼인 경우 */}
+                    {/* 1) 기술통계 표 Left (헤더 1 + 데이터 5 = 6행) */}
+                    <div style={{ flex: '1 1 0px', minWidth: '150px' }}>
+                      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.7rem', border: '1px solid #cbd5e1', backgroundColor: 'white', borderRadius: '4px', overflow: 'hidden' }}>
+                        <thead>
+                          <tr style={{ backgroundColor: '#f1f5f9', borderBottom: '1px solid #cbd5e1' }}>
+                            <th style={{ height: '25px', padding: '0 8px', textAlign: 'left', fontWeight: 'bold', color: '#475569', fontSize: '0.68rem' }}>기술통계</th>
+                            <th style={{ height: '25px', padding: '0 8px', textAlign: 'right', fontWeight: 'bold', color: '#475569', fontSize: '0.68rem' }}>값</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {[
+                            { label: 'size', val: stats.size?.toLocaleString() },
+                            { label: 'distinct', val: stats.distinct?.toLocaleString() },
+                            { label: 'distinct(%)', val: stats.distinctPercent },
+                            { label: 'missing', val: stats.missing?.toLocaleString() },
+                            { label: 'missing(%)', val: stats.missingPercent }
+                          ].map((row, idx) => (
+                            <tr key={idx} style={{ borderBottom: idx === 4 ? 'none' : '1px solid #e2e8f0' }}>
+                              <td style={{ height: '25px', padding: '0 8px', color: '#475569' }}>{row.label}</td>
+                              <td style={{ height: '25px', padding: '0 8px', textAlign: 'right', fontWeight: 'bold' }}>{row.val}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+
+                    {/* 2) 최빈값 (상위 5개) 표 (헤더 1 + 데이터 5 = 6행) */}
+                    <div style={{ flex: '1.2 1 0px', minWidth: '180px' }}>
+                      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.7rem', border: '1px solid #cbd5e1', backgroundColor: 'white', borderRadius: '4px', overflow: 'hidden' }}>
+                        <thead>
+                          <tr style={{ backgroundColor: '#f1f5f9', borderBottom: '1px solid #cbd5e1' }}>
+                            <th style={{ height: '25px', padding: '0 8px', textAlign: 'left', fontWeight: 'bold', color: '#475569', fontSize: '0.68rem' }}>최빈값 (상위 5개)</th>
+                            <th style={{ height: '25px', padding: '0 8px', textAlign: 'right', fontWeight: 'bold', color: '#475569', fontSize: '0.68rem' }}>빈도</th>
+                            <th style={{ height: '25px', padding: '0 8px', textAlign: 'right', fontWeight: 'bold', color: '#475569', fontSize: '0.68rem' }}>비율</th>
+                            <th style={{ height: '25px', padding: '0 4px', textAlign: 'center', width: '20px', color: '#475569' }}>🔍</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {(() => {
+                            const freqData = stats.sortedFreqs || [];
+                            const padded = [...freqData];
+                            while (padded.length < 5) {
+                              padded.push({ val: '', count: '', percent: '', isEmpty: true });
+                            }
+                            return padded.map((item, idx) => (
+                              <tr key={idx} style={{ borderBottom: idx === 4 ? 'none' : '1px solid #e2e8f0' }}>
+                                <td style={{ height: '25px', padding: '0 8px', color: '#1e293b', fontWeight: item.isEmpty ? 'normal' : 'bold', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '100px' }} title={item.val}>
+                                  {item.isEmpty ? '\u00A0' : item.val}
+                                </td>
+                                <td style={{ height: '25px', padding: '0 8px', textAlign: 'right', color: '#475569' }}>
+                                  {item.isEmpty ? '\u00A0' : item.count?.toLocaleString()}
+                                </td>
+                                <td style={{ height: '25px', padding: '0 8px', textAlign: 'right', color: '#475569' }}>
+                                  {item.isEmpty ? '\u00A0' : `${item.percent}%`}
+                                </td>
+                                <td style={{ height: '25px', padding: '0 4px', textAlign: 'center', color: '#94a3b8' }}></td>
+                              </tr>
+                            ));
+                          })()}
+                        </tbody>
+                      </table>
+                    </div>
+
+                    {/* 3) SVG Chart */}
+                    <div style={{ flex: '1.8 1 0px', height: '150px', minWidth: '260px', border: '1px solid #cbd5e1', borderRadius: '4px', padding: '4px', backgroundColor: 'white', display: 'flex', alignItems: 'center' }}>
+                      {renderPreprocessChart(stats, colName)}
+                    </div>
+                  </>
+                )}
+              </div>
+            ) : (
+              <div style={{ fontSize: '0.8rem', color: '#94a3b8', textAlign: 'center', padding: '20px' }}>데이터 로딩 실패 또는 데이터가 비어 있습니다.</div>
+            )}
+          </div>
+
+          {/* 하단: 데이터 가공 결과 미리보기 테이블 */}
+          <div style={{ border: '1px solid #e2e8f0', borderRadius: '8px', padding: '16px', backgroundColor: 'white', flex: 1, minHeight: '250px', display: 'flex', flexDirection: 'column' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+              <span style={{ fontSize: '0.9rem', fontWeight: 'bold', color: '#1e293b' }}>데이터 가공 결과</span>
+              <button
+                type="button"
+                onClick={handleApplyPreprocess}
+                disabled={!preprocessPreviewState}
+                style={{
+                  backgroundColor: preprocessPreviewState ? '#0f59f4' : '#cbd5e1',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '4px',
+                  padding: '6px 20px',
+                  fontSize: '0.75rem',
+                  fontWeight: 'bold',
+                  cursor: preprocessPreviewState ? 'pointer' : 'not-allowed',
+                  transition: 'all 0.2s'
+                }}
+              >
+                적용
+              </button>
+            </div>
+
+            {!preprocessPreviewState ? (
+              <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#94a3b8', fontSize: '0.8rem' }}>
+                보기 버튼을 클릭하여 데이터 가공 결과를 확인하세요
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
+                <div style={{ fontSize: '0.75rem', fontWeight: 'bold', color: '#475569', marginBottom: '8px', paddingBottom: '4px', borderBottom: '2px solid #3b82f6', width: 'fit-content' }}>
+                  {preprocessPreviewState.toolName}
+                </div>
+                <div style={{ flex: 1, overflowY: 'auto', border: '1px solid #e2e8f0', borderRadius: '4px' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.75rem' }}>
+                    <thead>
+                      <tr style={{ backgroundColor: '#f8fafc', borderBottom: '1px solid #cbd5e1', position: 'sticky', top: 0 }}>
+                        <th style={{ padding: '6px 12px', textAlign: 'left', fontWeight: 'bold', color: '#475569' }}>Index</th>
+                        <th style={{ padding: '6px 12px', textAlign: 'left', fontWeight: 'bold', color: '#475569' }}>before_value</th>
+                        <th style={{ padding: '6px 12px', textAlign: 'left', fontWeight: 'bold', color: '#475569' }}>after_value</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {preprocessPreviewState.rows.map((row, idx) => (
+                        <tr key={idx} style={{ borderBottom: '1px solid #e2e8f0', backgroundColor: idx % 2 === 0 ? 'white' : '#f8fafc' }}>
+                          <td style={{ padding: '6px 12px', color: '#475569' }}>{row.index + 1}</td>
+                          <td style={{ padding: '6px 12px', color: row.before === 'null' ? '#94a3b8' : '#1e293b', fontStyle: row.before === 'null' ? 'italic' : 'normal' }}>
+                            {row.before}
+                          </td>
+                          <td style={{ padding: '6px 12px', color: '#0f59f4', fontWeight: 'bold' }}>{row.after}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -2253,160 +4117,850 @@ export default function ExamPanel({
 
   const renderAiduModelTrainTab = () => {
     if (!activeFilename || !uploadedFiles[activeFilename]) return null;
-    const { headers, rows } = uploadedFiles[activeFilename];
+    const fileData = uploadedFiles[activeFilename];
+    const { headers } = fileData;
 
-    // Filter numeric headers for features/target
-    const numericCols = headers.filter(h => {
-      const nonBlank = rows.map(r => r[h]).filter(v => v !== '');
-      return nonBlank.length > 0 && nonBlank.every(v => !isNaN(Number(v)));
-    });
-
-    const handleFeatureToggle = (col) => {
-      if (modelFeatures.includes(col)) {
-        setModelFeatures(modelFeatures.filter(f => f !== col));
-      } else {
-        setModelFeatures([...modelFeatures, col]);
+    const handleDataTypeChange = (type) => {
+      setMlDataType(type);
+      setMlSelectedModels([]);
+      if (type === 'Categorical') {
+        setMlModelType('Classification');
       }
     };
 
-    const handleTrainModel = () => {
-      if (!modelTarget) {
-        alert('예측할 종속 변수(Target)를 선택해 주세요.');
-        return;
+    // Determine ML Model options based on Selected Model Type
+    const isClassification = mlModelType === 'Classification';
+    const modelsList = isClassification
+      ? [
+          'Logistic Regression',
+          'K Nearest Neighbor',
+          'Decision Tree',
+          'Random Forest',
+          'Light Gradient Boosting Machine'
+        ]
+      : [
+          'Linear Regression',
+          'K Neighbors Regressor',
+          'Decision Tree Regressor',
+          'Random Forest Regressor',
+          'Light Gradient Boosting Machine Regressor'
+        ];
+
+    // Align sorting metrics options
+    const sortMetrics = isClassification
+      ? ['Accuracy', 'AUC', 'Recall', 'Prec.', 'F1', 'Kappa', 'MCC']
+      : ['R2', 'MAE', 'MSE', 'RMSE', 'MAPE', 'RMSLE'];
+
+    // Variable Move Action Handlers
+    const handleMoveToOutput = () => {
+      if (!mlSelectedColInInput) return;
+      
+      const newOutput = mlSelectedColInInput;
+      let newInputs = mlInputCols.filter(c => c !== newOutput);
+      
+      // If output is already filled, push it back to input
+      if (mlOutputCol) {
+        newInputs.push(mlOutputCol);
       }
-      if (modelFeatures.length === 0) {
-        alert('학습에 사용할 독립 변수(Feature)를 하나 이상 선택해 주세요.');
-        return;
-      }
-      if (modelFeatures.includes(modelTarget)) {
-        alert('종속 변수와 독립 변수는 중복될 수 없습니다.');
+
+      setMlOutputCol(newOutput);
+      setMlInputCols(newInputs);
+      setMlSelectedColInInput('');
+      setMlSelectedColInOutput('');
+    };
+
+    const handleRemoveFromOutput = () => {
+      if (!mlOutputCol) return;
+      
+      setMlInputCols([...mlInputCols, mlOutputCol]);
+      setMlOutputCol('');
+      setMlSelectedColInOutput('');
+    };
+
+    const handleMoveToExclude = () => {
+      if (!mlSelectedColInInput) return;
+      if (mlExcludeCols.length >= 1) {
+        alert('제외 컬럼은 최대 1개만 설정 가능합니다.');
         return;
       }
 
-      setIsTraining(true);
-      
-      setTimeout(() => {
-        const slicedRows = rows.slice(dataRangeStart, dataRangeEnd);
-        const results = runLinearRegression(modelFeatures, modelTarget, slicedRows);
-        
-        if (!results) {
-          alert('학습 연산 처리 중 요효한 수치형 데이터를 추출하지 못했습니다.');
-          setIsTraining(false);
+      const newExclude = mlSelectedColInInput;
+      setMlExcludeCols([...mlExcludeCols, newExclude]);
+      setMlInputCols(mlInputCols.filter(c => c !== newExclude));
+      setMlSelectedColInInput('');
+    };
+
+    const handleRemoveFromExclude = () => {
+      if (mlExcludeCols.length === 0 || !mlSelectedColInExclude) return;
+
+      const toRestore = mlSelectedColInExclude;
+      setMlInputCols([...mlInputCols, toRestore]);
+      setMlExcludeCols(mlExcludeCols.filter(c => c !== toRestore));
+      setMlSelectedColInExclude('');
+    };
+
+    const handleModelToggle = (modelName) => {
+      if (mlSelectedModels.includes(modelName)) {
+        setMlSelectedModels(mlSelectedModels.filter(m => m !== modelName));
+      } else {
+        if (mlSelectedModels.length >= 5) {
+          alert('최대 5개 모델까지 선택할 수 있습니다.');
           return;
         }
+        setMlSelectedModels([...mlSelectedModels, modelName]);
+      }
+    };
 
-        setTrainedModel(results);
-        setIsTraining(false);
+    const handleMLTrainRun = () => {
+      if (!mlOutputCol) {
+        alert('Output 컬럼(종속 변수)을 지정해 주세요.');
+        return;
+      }
+      if (mlSelectedModels.length === 0) {
+        alert('학습에 사용할 ML 모델을 하나 이상 선택해 주세요.');
+        return;
+      }
 
-        // Initialize prediction inputs state
-        const initialInputs = {};
-        modelFeatures.forEach(f => { initialInputs[f] = ''; });
-        setPredictInputs(initialInputs);
-        setPredictionResult(null);
-      }, 1000);
+      setMlIsTraining(true);
+      setMlTrainResults(null);
+
+      setTimeout(() => {
+        // Generate simulated metrics
+        const results = mlSelectedModels.map(model => {
+          let code = '';
+          if (model.includes('Random Forest')) code = 'rf';
+          else if (model.includes('Boosting')) code = 'lightgbm';
+          else if (model.includes('Logistic')) code = 'lr';
+          else if (model.includes('Linear')) code = 'lr';
+          else if (model.includes('Decision Tree')) code = 'dt';
+          else if (model.includes('Neighbor')) code = 'knn';
+          else code = 'model';
+
+          if (isClassification) {
+            // Accuracy, AUC, Recall, Prec., F1, Kappa, MCC, TT (Sec)
+            const baseAcc = code === 'rf' ? 0.8766 : code === 'lightgbm' ? 0.8759 : code === 'lr' ? 0.8368 : code === 'dt' ? 0.8175 : 0.7943;
+            const baseAuc = code === 'rf' ? 0.9366 : code === 'lightgbm' ? 0.9416 : code === 'lr' ? 0.9122 : code === 'dt' ? 0.7964 : 0.8509;
+            const baseRecall = code === 'rf' ? 0.8553 : code === 'lightgbm' ? 0.8666 : code === 'lr' ? 0.8116 : code === 'dt' ? 0.7964 : 0.7644;
+            const basePrec = code === 'rf' ? 0.8764 : code === 'lightgbm' ? 0.8762 : code === 'lr' ? 0.8372 : code === 'dt' ? 0.8197 : 0.7931;
+            const baseF1 = code === 'rf' ? 0.8755 : code === 'lightgbm' ? 0.8751 : code === 'lr' ? 0.8352 : code === 'dt' ? 0.8171 : 0.7922;
+            const baseKappa = code === 'rf' ? 0.7220 : code === 'lightgbm' ? 0.7219 : code === 'lr' ? 0.6324 : code === 'dt' ? 0.5948 : 0.5364;
+            const baseMcc = code === 'rf' ? 0.7240 : code === 'lightgbm' ? 0.7236 : code === 'lr' ? 0.6356 : code === 'dt' ? 0.5974 : 0.5387;
+            const tt = code === 'rf' ? 1.98 : code === 'lightgbm' ? 0.59 : code === 'lr' ? 0.10 : code === 'dt' ? 0.14 : 0.08;
+
+            return {
+              modelCode: code,
+              modelName: model,
+              Accuracy: baseAcc,
+              AUC: baseAuc,
+              Recall: baseRecall,
+              'Prec.': basePrec,
+              F1: baseF1,
+              Kappa: baseKappa,
+              MCC: baseMcc,
+              'TT (Sec)': tt
+            };
+          } else {
+            // Regression: R2, MAE, MSE, RMSE, MAPE, RMSLE, TT (Sec)
+            const r2 = code === 'rf' ? 0.8542 : code === 'lightgbm' ? 0.8490 : code === 'lr' ? 0.7812 : code === 'dt' ? 0.7204 : 0.6954;
+            const mae = code === 'rf' ? 12.54 : code === 'lightgbm' ? 13.12 : code === 'lr' ? 16.45 : code === 'dt' ? 20.12 : 22.54;
+            const mse = code === 'rf' ? 234.12 : code === 'lightgbm' ? 242.08 : code === 'lr' ? 310.54 : code === 'dt' ? 412.35 : 465.12;
+            const rmse = code === 'rf' ? 15.30 : code === 'lightgbm' ? 15.56 : code === 'lr' ? 17.62 : code === 'dt' ? 20.31 : 21.56;
+            const mape = code === 'rf' ? 0.0842 : code === 'lightgbm' ? 0.0890 : code === 'lr' ? 0.1142 : code === 'dt' ? 0.1420 : 0.1584;
+            const rmsle = code === 'rf' ? 0.1124 : code === 'lightgbm' ? 0.1165 : code === 'lr' ? 0.1453 : code === 'dt' ? 0.1812 : 0.1984;
+            const tt = code === 'rf' ? 2.12 : code === 'lightgbm' ? 0.64 : code === 'lr' ? 0.08 : code === 'dt' ? 0.11 : 0.06;
+
+            return {
+              modelCode: code,
+              modelName: model,
+              R2: r2,
+              MAE: mae,
+              MSE: mse,
+              RMSE: rmse,
+              MAPE: mape,
+              RMSLE: rmsle,
+              'TT (Sec)': tt
+            };
+          }
+        });
+
+        // Sort results based on mlSortMetric
+        const sortedResults = [...results].sort((a, b) => {
+          const metric = mlSortMetric;
+          const isAscendingMetric = ['MAE', 'MSE', 'RMSE', 'MAPE', 'RMSLE'].includes(metric);
+          
+          const valA = a[metric] || 0;
+          const valB = b[metric] || 0;
+          
+          if (isAscendingMetric) {
+            return valA - valB;
+          } else {
+            return valB - valA;
+          }
+        });
+
+        setMlTrainResults(sortedResults);
+        setMlIsTraining(false);
+        setMlToastShow(true);
+
+        // Keep local trainedModel state updated to link prediction
+        setTrainedModel({
+          intercept: 10.03,
+          coefficients: mlInputCols.map(() => 0.5),
+          r2: sortedResults[0]?.[isClassification ? 'Accuracy' : 'R2'] || 0.85,
+          mse: sortedResults[0]?.['MSE'] || 15.0,
+          features: [...mlInputCols],
+          target: mlOutputCol
+        });
+
+        setTimeout(() => {
+          setMlToastShow(false);
+        }, 4000);
+      }, 1500);
     };
 
     return (
-      <div style={{ display: 'flex', width: '100%', height: '100%', overflow: 'hidden' }}>
-        <div className="aidu-settings-panel">
-          <div className="form-group">
-            <label style={{ fontSize: '0.8rem', fontWeight: 'bold' }}>학습 알고리즘</label>
-            <select className="form-control" style={{ fontSize: '0.8rem' }} value={modelType} onChange={(e) => setModelType(e.target.value)}>
-              <option value="linear">선형 회귀 (Linear Regression)</option>
-              <option value="tree" disabled>의사결정나무 (Decision Tree) - 준비중</option>
-            </select>
-          </div>
-
-          <div className="form-group">
-            <label style={{ fontSize: '0.8rem', fontWeight: 'bold' }}>종속 변수 (Target)</label>
-            <select 
-              className="form-control" 
-              style={{ fontSize: '0.8rem' }} 
-              value={modelTarget} 
-              onChange={(e) => setModelTarget(e.target.value)}
+      <div style={{ display: 'flex', width: '100%', height: '100%', overflow: 'hidden', position: 'relative', backgroundColor: '#f8f9fa' }}>
+        {/* Floating Green Completion Toast */}
+        {mlToastShow && (
+          <div style={{
+            position: 'absolute',
+            top: '20px',
+            right: '20px',
+            backgroundColor: '#d1e7dd',
+            color: '#0f5132',
+            border: '1px solid #badbcc',
+            padding: '12px 20px',
+            borderRadius: '6px',
+            boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
+            zIndex: 9999,
+            display: 'flex',
+            alignItems: 'center',
+            gap: '10px',
+            minWidth: '250px',
+            fontSize: '0.8rem',
+            fontWeight: 'bold',
+            animation: 'fadeIn 0.3s'
+          }}>
+            <span style={{ fontSize: '1rem' }}>✓</span>
+            <div style={{ flex: 1 }}>ML 모델 학습이 완료되었습니다.</div>
+            <button
+              onClick={() => setMlToastShow(false)}
+              style={{ background: 'none', border: 'none', color: '#0f5132', cursor: 'pointer', opacity: 0.8, fontSize: '1rem', padding: 0 }}
             >
-              <option value="">-- 선택 --</option>
-              {numericCols.map(h => <option key={h} value={h}>{h}</option>)}
-            </select>
+              &times;
+            </button>
           </div>
+        )}
 
-          <div className="form-group">
-            <label style={{ fontSize: '0.8rem', fontWeight: 'bold', display: 'block', marginBottom: '0.4rem' }}>독립 변수 (Features)</label>
-            <div className="aidu-column-list" style={{ maxHeight: '180px' }}>
-              {numericCols.map(h => {
-                const isChecked = modelFeatures.includes(h);
-                return (
-                  <label key={h} style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.75rem', padding: '0.35rem 0.5rem', border: '1px solid var(--border-color)', borderRadius: '4px', marginBottom: '0.25rem', cursor: 'pointer' }}>
-                    <input type="checkbox" checked={isChecked} onChange={() => handleFeatureToggle(h)} />
-                    {h}
-                  </label>
-                );
-              })}
+        {/* 1열: 학습 설정 (Left ML Settings) */}
+        <div style={{ width: '520px', borderRight: '1px solid #e2e8f0', padding: '16px', display: 'flex', flexDirection: 'column', gap: '16px', backgroundColor: 'white', flexShrink: 0, overflowY: 'auto' }}>
+          <h3 style={{ fontSize: '0.9rem', fontWeight: 'bold', margin: 0, color: '#1e293b' }}>학습 설정</h3>
+
+          {/* 1. Data Selection Stack (Horizontal grid) */}
+          <div style={{ display: 'flex', gap: '12px' }}>
+            <div style={{ flex: 1 }}>
+              <label style={{ fontSize: '0.75rem', fontWeight: 'bold', color: '#475569', display: 'block', marginBottom: '4px' }}>작업 데이터 선택</label>
+              <select
+                className="form-control"
+                style={{ fontSize: '0.75rem', padding: '4px 6px', borderRadius: '4px', border: '1px solid #cbd5e1', width: '100%', backgroundColor: 'white' }}
+                value={activeFilename}
+                onChange={(e) => setActiveFilename(e.target.value)}
+              >
+                {Object.keys(uploadedFiles).map(fn => (
+                  <option key={fn} value={fn}>{fn}</option>
+                ))}
+              </select>
+            </div>
+            <div style={{ flex: 1 }}>
+              <label style={{ fontSize: '0.75rem', fontWeight: 'bold', color: '#475569', display: 'block', marginBottom: '4px' }}>데이터 유형 선택</label>
+              <select
+                style={{ fontSize: '0.75rem', padding: '4px 6px', borderRadius: '4px', border: '1px solid #cbd5e1', width: '100%', backgroundColor: 'white' }}
+                value={mlDataType}
+                onChange={(e) => setMlDataType(e.target.value)}
+              >
+                <option value="Numeric">Numeric</option>
+                <option value="Categorical">Categorical</option>
+              </select>
+            </div>
+            <div style={{ flex: 1 }}>
+              <label style={{ fontSize: '0.75rem', fontWeight: 'bold', color: '#475569', display: 'block', marginBottom: '4px' }}>모델 유형</label>
+              <select
+                style={{ fontSize: '0.75rem', padding: '4px 6px', borderRadius: '4px', border: '1px solid #cbd5e1', width: '100%', backgroundColor: 'white' }}
+                value={mlModelType}
+                onChange={(e) => {
+                  setMlModelType(e.target.value);
+                  setMlSelectedModels([]);
+                }}
+              >
+                <option value="Classification">Classification</option>
+                <option value="Regression">Regression</option>
+              </select>
             </div>
           </div>
 
-          <button 
-            type="button" 
-            className="btn btn-primary btn-full" 
-            style={{ fontSize: '0.85rem' }} 
-            onClick={handleTrainModel}
-            disabled={isTraining || !modelTarget || modelFeatures.length === 0}
-          >
-            {isTraining ? '모델 학습 중...' : '모델 학습하기'}
-          </button>
-        </div>
-
-        <div className="aidu-results-panel">
-          {!trainedModel ? (
-            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: 'var(--text-light)', gap: '0.5rem' }}>
-              <Brain size={36} />
-              <p style={{ fontSize: '0.85rem' }}>변수들을 설정하고 좌측에서 [모델 학습하기]를 누르면 모델 성능 지표가 연산됩니다.</p>
-            </div>
-          ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
-              <div className="aidu-card">
-                <div className="aidu-card-header">모델 평가 성능 (Train Metrics)</div>
-                <div className="aidu-stats-summary">
-                  <div className="aidu-summary-item">
-                    <div className="aidu-summary-val">{trainedModel.r2.toFixed(4)}</div>
-                    <div className="aidu-summary-lbl">R2 Score (설명력)</div>
-                  </div>
-                  <div className="aidu-summary-item">
-                    <div className="aidu-summary-val">{trainedModel.mse.toFixed(2)}</div>
-                    <div className="aidu-summary-lbl">MSE (평균제곱오차)</div>
-                  </div>
-                  <div className="aidu-summary-item">
-                    <div className="aidu-summary-val">{trainedModel.coefficients.length}개</div>
-                    <div className="aidu-summary-lbl">사용된 피처 개수</div>
+          {/* Main workspace layout: Divided into 2 sub-columns */}
+          <div style={{ display: 'flex', gap: '16px', flex: 1, minHeight: '480px' }}>
+            
+            {/* Left Sub-Column: Column Management Workspace (Output, Input, Exclude Stacked Vertically) */}
+            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '12px', minWidth: 0 }}>
+              {/* Output 컬럼 */}
+              <div style={{ display: 'flex', flexDirection: 'column' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
+                  <span style={{ fontSize: '0.75rem', fontWeight: 'bold', color: '#475569' }}>Output 컬럼</span>
+                  <span style={{ fontSize: '0.65rem', color: '#94a3b8' }}>최대 1</span>
+                </div>
+                <div style={{
+                  height: '46px',
+                  border: '1px solid #cbd5e1',
+                  borderRadius: '4px',
+                  padding: '6px',
+                  backgroundColor: '#f8fafc',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  justifyContent: 'center'
+                }}>
+                  {mlOutputCol ? (
+                    <div
+                      onClick={() => setMlSelectedColInOutput(mlSelectedColInOutput === mlOutputCol ? '' : mlOutputCol)}
+                      style={{
+                        padding: '4px 8px',
+                        borderRadius: '3px',
+                        border: mlSelectedColInOutput === mlOutputCol ? '1px solid #3b82f6' : '1px solid #e2e8f0',
+                        backgroundColor: mlSelectedColInOutput === mlOutputCol ? '#eff6ff' : 'white',
+                        fontSize: '0.7rem',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center'
+                      }}
+                    >
+                      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{mlOutputCol}</span>
+                      <span style={{ fontSize: '0.65rem', padding: '1px 4px', borderRadius: '2px', backgroundColor: '#dcfce7', color: '#16a34a' }}>
+                        {fileData.types?.[mlOutputCol] || 'int64'}
+                      </span>
+                    </div>
+                  ) : (
+                    <span style={{ fontSize: '0.7rem', color: '#cbd5e1', textAlign: 'center' }}>데이터가 없습니다</span>
+                  )}
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '4px' }}>
+                  <span style={{ fontSize: '0.65rem', color: '#94a3b8' }}>총 {mlOutputCol ? 1 : 0}</span>
+                  <div style={{ display: 'flex', gap: '4px' }}>
+                    <button
+                      onClick={handleRemoveFromOutput}
+                      disabled={!mlOutputCol}
+                      style={{
+                        width: '28px',
+                        height: '20px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        backgroundColor: mlOutputCol ? '#0f59f4' : '#cbd5e1',
+                        color: 'white',
+                        border: 'none',
+                        borderRadius: '3px',
+                        fontSize: '0.65rem',
+                        cursor: mlOutputCol ? 'pointer' : 'not-allowed'
+                      }}
+                      title="Output 컬럼에서 제거"
+                    >
+                      ↓
+                    </button>
+                    <button
+                      onClick={handleMoveToOutput}
+                      disabled={!mlSelectedColInInput}
+                      style={{
+                        width: '28px',
+                        height: '20px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        backgroundColor: mlSelectedColInInput ? '#0f59f4' : '#cbd5e1',
+                        color: 'white',
+                        border: 'none',
+                        borderRadius: '3px',
+                        fontSize: '0.65rem',
+                        cursor: mlSelectedColInInput ? 'pointer' : 'not-allowed'
+                      }}
+                      title="Input 컬럼에서 Output으로 설정"
+                    >
+                      ↑
+                    </button>
                   </div>
                 </div>
               </div>
 
-              <div className="aidu-card">
-                <div className="aidu-card-header">모델 계수 (Model Coefficients)</div>
-                <table className="aidu-table">
-                  <thead>
-                    <tr>
-                      <th>변수명 (Feature)</th>
-                      <th>회귀 계수 (Weight)</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <tr>
-                      <td style={{ fontWeight: 'bold' }}>편향 (Bias / Intercept)</td>
-                      <td style={{ color: 'var(--primary)', fontWeight: 'bold' }}>{trainedModel.intercept}</td>
-                    </tr>
-                    {trainedModel.features.map((f, idx) => (
-                      <tr key={f}>
-                        <td>{f}</td>
-                        <td style={{ fontWeight: '600' }}>{trainedModel.coefficients[idx]}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+              {/* Input 컬럼 */}
+              <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: '180px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
+                  <span style={{ fontSize: '0.75rem', fontWeight: 'bold', color: '#475569' }}>Input 컬럼</span>
+                </div>
+                <div style={{
+                  flex: 1,
+                  border: '1px solid #cbd5e1',
+                  borderRadius: '4px',
+                  padding: '6px',
+                  overflowY: 'auto',
+                  backgroundColor: 'white',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '4px'
+                }}>
+                  {mlInputCols.length === 0 ? (
+                    <span style={{ fontSize: '0.7rem', color: '#cbd5e1', textAlign: 'center', margin: 'auto' }}>데이터가 없습니다</span>
+                  ) : (
+                    mlInputCols.map(col => {
+                      const isSelected = col === mlSelectedColInInput;
+                      const type = fileData.types?.[col] || 'object';
+
+                      let badgeBg = '#f1f5f9';
+                      let badgeColor = '#475569';
+                      if (type === 'object') {
+                        badgeBg = '#e0f2fe';
+                        badgeColor = '#0284c7';
+                      } else if (type === 'int64') {
+                        badgeBg = '#dcfce7';
+                        badgeColor = '#16a34a';
+                      } else if (type === 'float64') {
+                        badgeBg = '#fef3c7';
+                        badgeColor = '#d97706';
+                      }
+
+                      return (
+                        <div
+                          key={col}
+                          onClick={() => setMlSelectedColInInput(isSelected ? '' : col)}
+                          style={{
+                            display: 'flex',
+                            justifyContent: 'space-between',
+                            alignItems: 'center',
+                            padding: '4px 6px',
+                            borderRadius: '3px',
+                            border: isSelected ? '1px solid #3b82f6' : '1px solid #cbd5e1',
+                            backgroundColor: isSelected ? '#eff6ff' : 'white',
+                            fontSize: '0.7rem',
+                            cursor: 'pointer'
+                          }}
+                        >
+                          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '100px' }}>{col}</span>
+                          <span style={{ fontSize: '0.6rem', padding: '1px 4px', borderRadius: '2px', backgroundColor: badgeBg, color: badgeColor }}>{type}</span>
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '4px' }}>
+                  <span style={{ fontSize: '0.65rem', color: '#94a3b8' }}>총 {mlInputCols.length}</span>
+                  <div style={{ display: 'flex', gap: '4px' }}>
+                    <button
+                      onClick={handleRemoveFromExclude}
+                      disabled={!mlSelectedColInExclude}
+                      style={{
+                        width: '28px',
+                        height: '20px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        backgroundColor: mlSelectedColInExclude ? '#0f59f4' : '#cbd5e1',
+                        color: 'white',
+                        border: 'none',
+                        borderRadius: '3px',
+                        fontSize: '0.65rem',
+                        cursor: mlSelectedColInExclude ? 'pointer' : 'not-allowed'
+                      }}
+                      title="제외 컬럼에서 복원"
+                    >
+                      ↑
+                    </button>
+                    <button
+                      onClick={handleMoveToExclude}
+                      disabled={!mlSelectedColInInput}
+                      style={{
+                        width: '28px',
+                        height: '20px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        backgroundColor: mlSelectedColInInput ? '#0f59f4' : '#cbd5e1',
+                        color: 'white',
+                        border: 'none',
+                        borderRadius: '3px',
+                        fontSize: '0.65rem',
+                        cursor: mlSelectedColInInput ? 'pointer' : 'not-allowed'
+                      }}
+                      title="제외 컬럼으로 설정"
+                    >
+                      ↓
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* 제외 컬럼 */}
+              <div style={{ display: 'flex', flexDirection: 'column' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
+                  <span style={{ fontSize: '0.75rem', fontWeight: 'bold', color: '#475569' }}>제외 컬럼</span>
+                  <span style={{ fontSize: '0.65rem', color: '#94a3b8' }}>최대 1</span>
+                </div>
+                <div style={{
+                  height: '46px',
+                  border: '1px solid #cbd5e1',
+                  borderRadius: '4px',
+                  padding: '6px',
+                  backgroundColor: '#f8fafc',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  justifyContent: 'center'
+                }}>
+                  {mlExcludeCols.length > 0 ? (
+                    mlExcludeCols.map(col => (
+                      <div
+                        key={col}
+                        onClick={() => setMlSelectedColInExclude(mlSelectedColInExclude === col ? '' : col)}
+                        style={{
+                          padding: '4px 8px',
+                          borderRadius: '3px',
+                          border: mlSelectedColInExclude === col ? '1px solid #3b82f6' : '1px solid #e2e8f0',
+                          backgroundColor: mlSelectedColInExclude === col ? '#eff6ff' : 'white',
+                          fontSize: '0.7rem',
+                          cursor: 'pointer',
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          alignItems: 'center'
+                        }}
+                      >
+                        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{col}</span>
+                        <span style={{ fontSize: '0.65rem', padding: '1px 4px', borderRadius: '2px', backgroundColor: '#fef3c7', color: '#d97706' }}>
+                          {fileData.types?.[col] || 'float64'}
+                        </span>
+                      </div>
+                    ))
+                  ) : (
+                    <span style={{ fontSize: '0.7rem', color: '#cbd5e1', textAlign: 'center' }}>데이터가 없습니다</span>
+                  )}
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '4px' }}>
+                  <span style={{ fontSize: '0.65rem', color: '#94a3b8' }}>총 {mlExcludeCols.length}</span>
+                </div>
               </div>
             </div>
-          )}
+
+            {/* Right Sub-Column: Preprocessing parameters, Model Selection & Triggers */}
+            <div style={{ flex: 1.1, display: 'flex', flexDirection: 'column', gap: '10px', minWidth: 0 }}>
+              
+              {/* 이상치 제외 여부 (Classification일 때만) */}
+              {isClassification && (
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span style={{ fontSize: '0.75rem', fontWeight: 'bold', color: '#475569' }}>
+                    이상치 제외 여부 <span style={{ color: '#94a3b8', cursor: 'help' }} title="이상치 기준을 설정하여 분석에서 탈락시킵니다.">?</span>
+                  </span>
+                  <select
+                    style={{ fontSize: '0.75rem', padding: '3px 6px', borderRadius: '4px', border: '1px solid #cbd5e1', width: '130px', backgroundColor: 'white' }}
+                    value={mlOutlierHandling}
+                    onChange={(e) => setMlOutlierHandling(e.target.value)}
+                  >
+                    <option value="포함">포함</option>
+                    <option value="미포함">미포함</option>
+                  </select>
+                </div>
+              )}
+
+              {/* 학습 데이터 비율 */}
+              <div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2px' }}>
+                  <span style={{ fontSize: '0.75rem', fontWeight: 'bold', color: '#475569' }}>학습 데이터 비율</span>
+                  <input
+                    type="text"
+                    readOnly
+                    value={mlTrainRatio}
+                    style={{
+                      width: '45px',
+                      height: '20px',
+                      fontSize: '0.7rem',
+                      textAlign: 'center',
+                      border: '1px solid #cbd5e1',
+                      borderRadius: '3px',
+                      backgroundColor: '#f1f5f9',
+                      color: '#475569'
+                    }}
+                  />
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <input
+                    type="range"
+                    min="10"
+                    max="95"
+                    style={{ flex: 1 }}
+                    value={mlTrainRatio * 100}
+                    onChange={(e) => setMlTrainRatio(Number(e.target.value) / 100)}
+                  />
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.65rem', color: '#94a3b8', marginTop: '1px' }}>
+                  <span>10%</span>
+                  <span>95%</span>
+                </div>
+              </div>
+
+              {/* 교차 검증 유형 */}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span style={{ fontSize: '0.75rem', fontWeight: 'bold', color: '#475569' }}>교차 검증 유형</span>
+                <select
+                  style={{ fontSize: '0.75rem', padding: '3px 6px', borderRadius: '4px', border: '1px solid #cbd5e1', width: '130px', backgroundColor: 'white' }}
+                  value={mlCvType}
+                  onChange={(e) => setMlCvType(e.target.value)}
+                >
+                  {isClassification ? (
+                    <>
+                      <option value="stratifiedkfold">stratifiedkfold</option>
+                      <option value="kfold">kfold</option>
+                    </>
+                  ) : (
+                    <option value="kfold">kfold</option>
+                  )}
+                </select>
+              </div>
+
+              {/* 교차 검증 fold 수 */}
+              <div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2px' }}>
+                  <span style={{ fontSize: '0.75rem', fontWeight: 'bold', color: '#475569' }}>교차 검증 fold 수</span>
+                  <input
+                    type="text"
+                    readOnly
+                    value={mlCvFolds}
+                    style={{
+                      width: '45px',
+                      height: '20px',
+                      fontSize: '0.7rem',
+                      textAlign: 'center',
+                      border: '1px solid #cbd5e1',
+                      borderRadius: '3px',
+                      backgroundColor: '#f1f5f9',
+                      color: '#475569'
+                    }}
+                  />
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <input
+                    type="range"
+                    min="2"
+                    max="10"
+                    style={{ flex: 1 }}
+                    value={mlCvFolds}
+                    onChange={(e) => setMlCvFolds(Number(e.target.value))}
+                  />
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.65rem', color: '#94a3b8', marginTop: '1px' }}>
+                  <span>2</span>
+                  <span>10</span>
+                </div>
+              </div>
+
+              {/* 타겟 데이터 불균형 처리 (Classification일 때만) */}
+              {isClassification && (
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span style={{ fontSize: '0.75rem', fontWeight: 'bold', color: '#475569' }}>타겟 데이터 불균형 처리</span>
+                  <select
+                    style={{ fontSize: '0.75rem', padding: '3px 6px', borderRadius: '4px', border: '1px solid #cbd5e1', width: '130px', backgroundColor: 'white' }}
+                    value={mlImbalanceHandling}
+                    onChange={(e) => setMlImbalanceHandling(e.target.value)}
+                  >
+                    <option value="없음">없음</option>
+                    <option value="oversampling">oversampling</option>
+                    <option value="undersampling">undersampling</option>
+                  </select>
+                </div>
+              )}
+
+              {/* ML 모델 선택 */}
+              <div style={{ display: 'flex', flexDirection: 'column' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
+                  <span style={{ fontSize: '0.75rem', fontWeight: 'bold', color: '#475569' }}>ML 모델 선택</span>
+                  <span style={{ fontSize: '0.65rem', color: '#94a3b8' }}>총 {mlSelectedModels.length}  최대 5</span>
+                </div>
+                <div style={{ border: '1px solid #cbd5e1', borderRadius: '4px', overflowY: 'auto', maxHeight: '110px', display: 'flex', flexDirection: 'column' }}>
+                  {modelsList.map(model => {
+                    const isSelected = mlSelectedModels.includes(model);
+                    return (
+                      <div
+                        key={model}
+                        onClick={() => handleModelToggle(model)}
+                        style={{
+                          padding: '5px 8px',
+                          fontSize: '0.7rem',
+                          cursor: 'pointer',
+                          borderBottom: '1px solid #e2e8f0',
+                          backgroundColor: isSelected ? '#eff6ff' : 'white',
+                          color: isSelected ? '#0f59f4' : '#334155',
+                          fontWeight: isSelected ? 'bold' : 'normal',
+                          transition: 'all 0.15s'
+                        }}
+                      >
+                        {model}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* 모델 Parameter 설정 */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                <div style={{ fontSize: '0.75rem', fontWeight: 'bold', color: '#1e293b' }}>모델 Parameter 설정</div>
+                
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span style={{ fontSize: '0.7rem', color: '#475569' }}>sort</span>
+                  <select
+                    style={{ fontSize: '0.75rem', padding: '3px 6px', borderRadius: '4px', border: '1px solid #cbd5e1', width: '130px', backgroundColor: 'white' }}
+                    value={mlSortMetric}
+                    onChange={(e) => setMlSortMetric(e.target.value)}
+                  >
+                    {sortMetrics.map(m => (
+                      <option key={m} value={m}>{m}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span style={{ fontSize: '0.7rem', color: '#475569' }}>cross_validation</span>
+                  <select
+                    style={{ fontSize: '0.75rem', padding: '3px 6px', borderRadius: '4px', border: '1px solid #cbd5e1', width: '130px', backgroundColor: 'white' }}
+                    value={mlCvEnabled}
+                    onChange={(e) => setMlCvEnabled(e.target.value)}
+                  >
+                    <option value="true">true</option>
+                    <option value="false">false</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* 학습 시작 */}
+              <button
+                type="button"
+                className="btn btn-primary btn-full"
+                onClick={handleMLTrainRun}
+                disabled={mlIsTraining || !mlOutputCol || mlSelectedModels.length === 0}
+                style={{
+                  fontSize: '0.8rem',
+                  padding: '8px 0',
+                  borderRadius: '4px',
+                  fontWeight: 'bold',
+                  marginTop: 'auto',
+                  backgroundColor: (!mlOutputCol || mlSelectedModels.length === 0) ? '#cbd5e1' : '#0f59f4',
+                  cursor: (!mlOutputCol || mlSelectedModels.length === 0) ? 'not-allowed' : 'pointer'
+                }}
+              >
+                {mlIsTraining ? '머신러닝 학습 중...' : '학습 시작'}
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* 2열: 학습 결과 (Right results pane) */}
+        <div style={{ flex: 1, padding: '16px', display: 'flex', flexDirection: 'column', gap: '16px', minWidth: 0, overflowY: 'auto' }}>
+          
+          <div style={{ border: '1px solid #e2e8f0', borderRadius: '8px', padding: '16px', backgroundColor: 'white', flex: 1, display: 'flex', flexDirection: 'column', minHeight: '350px' }}>
+            
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+              <h3 style={{ fontSize: '0.9rem', fontWeight: 'bold', margin: 0, color: '#1e293b' }}>머신러닝 학습 결과</h3>
+              
+              {/* Display Result Action buttons if training complete */}
+              {mlTrainResults && (
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  <button
+                    type="button"
+                    onClick={() => alert('시뮬레이터 평가에서는 머신러닝 ROC 곡선 차트 데모를 준비 중입니다.')}
+                    style={{ backgroundColor: '#0f59f4', color: 'white', border: 'none', borderRadius: '4px', padding: '4px 12px', fontSize: '0.7rem', fontWeight: 'bold', cursor: 'pointer' }}
+                  >
+                    차트 보기
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => alert('학습 완료 모델이 로컬 시뮬레이터 레지스트리에 저장되었습니다.')}
+                    style={{ backgroundColor: '#0f59f4', color: 'white', border: 'none', borderRadius: '4px', padding: '4px 12px', fontSize: '0.7rem', fontWeight: 'bold', cursor: 'pointer' }}
+                  >
+                    모델 저장
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {mlIsTraining ? (
+              <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: '#94a3b8', gap: '12px' }}>
+                <span style={{ fontSize: '1.5rem', animation: 'spin 1s linear infinite', display: 'inline-block' }}>⚙️</span>
+                <span style={{ fontSize: '0.8rem' }}>모델 학습 연산 수행 중...</span>
+              </div>
+            ) : !mlTrainResults ? (
+              <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#94a3b8', fontSize: '0.8rem', textAlign: 'center' }}>
+                학습 시작 버튼을 클릭하여 머신러닝 학습을 시작하세요
+              </div>
+            ) : (
+              <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+                <div style={{ flex: 1, overflowY: 'auto', border: '1px solid #cbd5e1', borderRadius: '4px' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.75rem' }}>
+                    <thead>
+                      <tr style={{ backgroundColor: '#f8fafc', borderBottom: '1px solid #cbd5e1', position: 'sticky', top: 0 }}>
+                        <th style={{ padding: '8px 12px', textAlign: 'left', fontWeight: 'bold', color: '#475569' }}>Index</th>
+                        <th style={{ padding: '8px 12px', textAlign: 'left', fontWeight: 'bold', color: '#475569' }}>Model</th>
+                        {isClassification ? (
+                          <>
+                            <th style={{ padding: '8px 12px', textAlign: 'right', fontWeight: 'bold', color: '#475569' }}>Accuracy</th>
+                            <th style={{ padding: '8px 12px', textAlign: 'right', fontWeight: 'bold', color: '#475569' }}>AUC</th>
+                            <th style={{ padding: '8px 12px', textAlign: 'right', fontWeight: 'bold', color: '#475569' }}>Recall</th>
+                            <th style={{ padding: '8px 12px', textAlign: 'right', fontWeight: 'bold', color: '#475569' }}>Prec.</th>
+                            <th style={{ padding: '8px 12px', textAlign: 'right', fontWeight: 'bold', color: '#475569' }}>F1</th>
+                            <th style={{ padding: '8px 12px', textAlign: 'right', fontWeight: 'bold', color: '#475569' }}>Kappa</th>
+                            <th style={{ padding: '8px 12px', textAlign: 'right', fontWeight: 'bold', color: '#475569' }}>MCC</th>
+                          </>
+                        ) : (
+                          <>
+                            <th style={{ padding: '8px 12px', textAlign: 'right', fontWeight: 'bold', color: '#475569' }}>R2</th>
+                            <th style={{ padding: '8px 12px', textAlign: 'right', fontWeight: 'bold', color: '#475569' }}>MAE</th>
+                            <th style={{ padding: '8px 12px', textAlign: 'right', fontWeight: 'bold', color: '#475569' }}>MSE</th>
+                            <th style={{ padding: '8px 12px', textAlign: 'right', fontWeight: 'bold', color: '#475569' }}>RMSE</th>
+                            <th style={{ padding: '8px 12px', textAlign: 'right', fontWeight: 'bold', color: '#475569' }}>MAPE</th>
+                            <th style={{ padding: '8px 12px', textAlign: 'right', fontWeight: 'bold', color: '#475569' }}>RMSLE</th>
+                          </>
+                        )}
+                        <th style={{ padding: '8px 12px', textAlign: 'right', fontWeight: 'bold', color: '#475569' }}>TT (Sec)</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {mlTrainResults.map((row, idx) => {
+                        const isSortedByThis = mlSortMetric;
+                        return (
+                          <tr key={idx} style={{ borderBottom: '1px solid #cbd5e1', backgroundColor: idx % 2 === 0 ? 'white' : '#f8fafc' }}>
+                            <td style={{ padding: '8px 12px', color: '#475569' }}>{row.modelCode}</td>
+                            <td style={{ padding: '8px 12px', fontWeight: 'bold', color: '#1e293b' }}>{row.modelName}</td>
+                            {isClassification ? (
+                              <>
+                                <td style={{ padding: '8px 12px', textAlign: 'right', color: isSortedByThis === 'Accuracy' ? '#0f59f4' : '#475569', fontWeight: isSortedByThis === 'Accuracy' ? 'bold' : 'normal' }}>{row.Accuracy.toFixed(4)}</td>
+                                <td style={{ padding: '8px 12px', textAlign: 'right', color: isSortedByThis === 'AUC' ? '#0f59f4' : '#475569', fontWeight: isSortedByThis === 'AUC' ? 'bold' : 'normal' }}>{row.AUC.toFixed(4)}</td>
+                                <td style={{ padding: '8px 12px', textAlign: 'right', color: isSortedByThis === 'Recall' ? '#0f59f4' : '#475569', fontWeight: isSortedByThis === 'Recall' ? 'bold' : 'normal' }}>{row.Recall.toFixed(4)}</td>
+                                <td style={{ padding: '8px 12px', textAlign: 'right', color: isSortedByThis === 'Prec.' ? '#0f59f4' : '#475569', fontWeight: isSortedByThis === 'Prec.' ? 'bold' : 'normal' }}>{row['Prec.'].toFixed(4)}</td>
+                                <td style={{ padding: '8px 12px', textAlign: 'right', color: isSortedByThis === 'F1' ? '#0f59f4' : '#475569', fontWeight: isSortedByThis === 'F1' ? 'bold' : 'normal' }}>{row.F1.toFixed(4)}</td>
+                                <td style={{ padding: '8px 12px', textAlign: 'right', color: isSortedByThis === 'Kappa' ? '#0f59f4' : '#475569', fontWeight: isSortedByThis === 'Kappa' ? 'bold' : 'normal' }}>{row.Kappa.toFixed(4)}</td>
+                                <td style={{ padding: '8px 12px', textAlign: 'right', color: isSortedByThis === 'MCC' ? '#0f59f4' : '#475569', fontWeight: isSortedByThis === 'MCC' ? 'bold' : 'normal' }}>{row.MCC.toFixed(4)}</td>
+                              </>
+                            ) : (
+                              <>
+                                <td style={{ padding: '8px 12px', textAlign: 'right', color: isSortedByThis === 'R2' ? '#0f59f4' : '#475569', fontWeight: isSortedByThis === 'R2' ? 'bold' : 'normal' }}>{row.R2.toFixed(4)}</td>
+                                <td style={{ padding: '8px 12px', textAlign: 'right', color: isSortedByThis === 'MAE' ? '#0f59f4' : '#475569', fontWeight: isSortedByThis === 'MAE' ? 'bold' : 'normal' }}>{row.MAE.toFixed(2)}</td>
+                                <td style={{ padding: '8px 12px', textAlign: 'right', color: isSortedByThis === 'MSE' ? '#0f59f4' : '#475569', fontWeight: isSortedByThis === 'MSE' ? 'bold' : 'normal' }}>{row.MSE.toFixed(2)}</td>
+                                <td style={{ padding: '8px 12px', textAlign: 'right', color: isSortedByThis === 'RMSE' ? '#0f59f4' : '#475569', fontWeight: isSortedByThis === 'RMSE' ? 'bold' : 'normal' }}>{row.RMSE.toFixed(2)}</td>
+                                <td style={{ padding: '8px 12px', textAlign: 'right', color: isSortedByThis === 'MAPE' ? '#0f59f4' : '#475569', fontWeight: isSortedByThis === 'MAPE' ? 'bold' : 'normal' }}>{row.MAPE.toFixed(4)}</td>
+                                <td style={{ padding: '8px 12px', textAlign: 'right', color: isSortedByThis === 'RMSLE' ? '#0f59f4' : '#475569', fontWeight: isSortedByThis === 'RMSLE' ? 'bold' : 'normal' }}>{row.RMSLE.toFixed(4)}</td>
+                              </>
+                            )}
+                            <td style={{ padding: '8px 12px', textAlign: 'right', color: '#475569' }}>{row['TT (Sec)'].toFixed(2)}</td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+          </div>
         </div>
       </div>
     );
@@ -2551,13 +5105,15 @@ export default function ExamPanel({
                 const file = uploadedFiles[activeFilename];
                 setSelectedColumns([...file.headers]);
                 const N = file.rows.length;
+                const initialEnd = Math.max(1, Math.floor(N * 0.3));
                 setDataRangeStart(0);
-                setDataRangeEnd(N);
-                setVizRenderState({
-                  type: 'heatmap',
-                  columns: [...file.headers],
-                  rangeEnd: N
-                });
+                setDataRangeEnd(initialEnd);
+                setVizRenderState(null);
+                setHueColumn('');
+                setActiveChart('none');
+                setBoxplotY('');
+                setBoxplotX('');
+                setDistributionX('');
                 setAnalysisResults(null);
               }
             }}>
@@ -2571,6 +5127,12 @@ export default function ExamPanel({
               setAiduTab('import');
               setDataRangeStart(0);
               setDataRangeEnd(0);
+              setVizRenderState(null);
+              setHueColumn('');
+              setActiveChart('none');
+              setBoxplotY('');
+              setBoxplotX('');
+              setDistributionX('');
             }}>
               데이터 초기화
             </button>
@@ -2727,16 +5289,47 @@ export default function ExamPanel({
 
           {/* Main Content Pane */}
           <div className="aidu-main-content">
-            {aiduTab === 'home' && renderAiduHomeTab()}
-            {aiduTab === 'import' && renderAiduImportTab()}
-            {aiduTab === 'describe' && renderAiduDescribeTab()}
-            {aiduTab === 'visualize' && renderAiduVisualizeTab()}
-            {aiduTab === 'unsupervised' && renderAiduUnsupervisedTab()}
-            {aiduTab === 'sample' && renderAiduSampleTab()}
-            {aiduTab === 'preprocess' && renderAiduPreprocessTab()}
-            {aiduTab === 'model_train' && renderAiduModelTrainTab()}
-            {aiduTab === 'model_use' && renderAiduModelUseTab()}
-            {aiduTab === 'settings' && renderAiduSettingsTab()}
+            {isCsvLoading ? (
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', gap: '1rem', color: 'var(--text-light, #8a99ad)' }}>
+                <div className="loading-spinner" style={{ width: '40px', height: '40px', border: '4px solid #f3f3f3', borderTop: '4px solid var(--primary, #3b82f6)', borderRadius: '50%', animation: 'spin 1s linear infinite' }}></div>
+                <p style={{ fontWeight: 'bold' }}>구글 드라이브/스프레드시트에서 실습용 데이터셋을 로드하는 중입니다...</p>
+                <style>{`
+                  @keyframes spin {
+                    0% { transform: rotate(0deg); }
+                    100% { transform: rotate(360deg); }
+                  }
+                `}</style>
+              </div>
+            ) : csvLoadError ? (
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', padding: '2rem', textAlign: 'center', gap: '1rem' }}>
+                <div style={{ fontSize: '3rem' }}>⚠️</div>
+                <h3 style={{ color: 'var(--danger, #dc2626)', fontWeight: 'bold' }}>데이터셋 로드 실패</h3>
+                <p style={{ maxWidth: '600px', fontSize: '0.9rem', lineHeight: '1.6', color: 'var(--text-main, #e2e8f0)', whiteSpace: 'pre-line' }}>
+                  {csvLoadError}
+                </p>
+                <div style={{ marginTop: '1rem', padding: '1rem', backgroundColor: 'var(--card-bg, #111827)', borderRadius: '6px', border: '1px solid var(--border-color, #374151)', maxWidth: '600px', textAlign: 'left', fontSize: '0.8rem', color: 'var(--text-light, #9ca3af)' }}>
+                  <b style={{ color: '#fff' }}>💡 문제 해결 가이드:</b>
+                  <ol style={{ paddingLeft: '1.25rem', marginTop: '0.5rem', display: 'flex', flexDirection: 'column', gap: '0.35rem', listStyleType: 'decimal' }}>
+                    <li>구글 스프레드시트의 <b>[파일] &gt; [공유] &gt; [웹에 게시]</b>를 실행했는지 확인합니다.</li>
+                    <li>게시 설정에서 형식이 <b>'쉼표로 구분된 값(.csv)'</b>인지 확인합니다. (그냥 드라이브 주소 공유 링크 대신, 웹에 게시된 링크 주소를 복사해 입력해야 합니다.)</li>
+                    <li>구글 드라이브 일반 파일인 경우, 공유 권한이 <b>'링크가 있는 모든 사용자(뷰어)'</b>로 설정되어 있는지 확인합니다.</li>
+                  </ol>
+                </div>
+              </div>
+            ) : (
+              <>
+                {aiduTab === 'home' && renderAiduHomeTab()}
+                {aiduTab === 'import' && renderAiduImportTab()}
+                {aiduTab === 'describe' && renderAiduDescribeTab()}
+                {aiduTab === 'visualize' && renderAiduVisualizeTab()}
+                {aiduTab === 'unsupervised' && renderAiduUnsupervisedTab()}
+                {aiduTab === 'sample' && renderAiduSampleTab()}
+                {aiduTab === 'preprocess' && renderAiduPreprocessTab()}
+                {aiduTab === 'model_train' && renderAiduModelTrainTab()}
+                {aiduTab === 'model_use' && renderAiduModelUseTab()}
+                {aiduTab === 'settings' && renderAiduSettingsTab()}
+              </>
+            )}
           </div>
         </div>
       </div>
@@ -2782,10 +5375,10 @@ export default function ExamPanel({
         style={hasAiduData ? {
           display: 'grid',
           gridTemplateColumns: rightPanelCollapsed ? '1fr 12px' : '1fr 12px 450px',
-          maxWidth: '1650px',
-          margin: '1.5rem auto',
-          padding: '0 1rem',
-          height: 'calc(100vh - 120px)',
+          maxWidth: '100%',
+          margin: '0 auto',
+          padding: '0 12px',
+          height: 'calc(100vh - 76px)',
           gap: '0'
         } : {}}
       >

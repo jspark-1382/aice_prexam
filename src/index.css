@@ -1515,7 +1515,7 @@ body.dark-theme .markdown-desc-box code {
   border-radius: var(--radius-md);
   box-shadow: var(--shadow-md);
   overflow: hidden;
-  height: 720px;
+  height: 100%;
   animation: fadeIn 0.4s ease;
 }
 
@@ -1583,7 +1583,7 @@ body.dark-theme .markdown-desc-box code {
 }
 
 .aidu-sidebar {
-  width: 180px;
+  width: 50px !important;
   background-color: var(--bg-card);
   border-right: 1px solid var(--border-color);
   display: flex;
@@ -1591,22 +1591,34 @@ body.dark-theme .markdown-desc-box code {
   padding: 1rem 0;
   gap: 0.25rem;
   flex-shrink: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  transition: width 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  z-index: 50;
+}
+
+.aidu-sidebar:hover {
+  width: 180px !important;
 }
 
 .aidu-menu-item {
   display: flex;
   align-items: center;
   gap: 0.75rem;
-  padding: 0.75rem 1.25rem;
+  padding: 0.75rem 17px !important; /* Centering the 16px icon inside 50px sidebar */
   font-size: 0.875rem;
   font-weight: 600;
   color: var(--text-muted);
   background: none;
   border: none;
-  width: 100%;
+  width: 180px; /* Fixed width prevents word wrap during expansion */
   text-align: left;
   cursor: pointer;
-  transition: var(--transition);
+  transition: background-color 0.15s ease, color 0.15s ease, padding 0.2s ease;
+  white-space: nowrap;
+  overflow: hidden;
+  flex-shrink: 0;
+  border-left: 4px solid transparent;
 }
 
 .aidu-menu-item:hover {
@@ -1618,7 +1630,7 @@ body.dark-theme .markdown-desc-box code {
   background-color: var(--primary-light);
   color: var(--primary);
   border-left: 4px solid var(--primary);
-  padding-left: calc(1.25rem - 4px);
+  padding-left: 13px !important; /* Offset padding to keep icon centered when border is present */
 }
 
 body.dark-theme .aidu-menu-item.active {
@@ -1627,27 +1639,51 @@ body.dark-theme .aidu-menu-item.active {
   border-left-color: #6366f1;
 }
 
+.aidu-sidebar:hover .aidu-menu-item {
+  padding-left: 1.25rem !important;
+}
+
+.aidu-sidebar:hover .aidu-menu-item.active {
+  padding-left: calc(1.25rem - 4px) !important;
+}
+
+.aidu-sidebar:not(:hover) .aidu-menu-submenu {
+  display: none !important;
+}
+
+.aidu-sidebar:not(:hover) .aidu-menu-item span:last-child:not(:first-child) {
+  opacity: 0 !important;
+  pointer-events: none !important;
+}
+
 .aidu-menu-submenu {
+  width: 180px;
   display: flex;
   flex-direction: column;
   background-color: var(--bg-main);
   padding: 0.25rem 0;
   border-bottom: 1px solid var(--border-color);
+  overflow: hidden;
+  flex-shrink: 0;
 }
 
 .aidu-menu-subitem {
   display: flex;
   align-items: center;
-  padding: 0.5rem 1.25rem 0.5rem 2.25rem;
+  padding: 0.5rem 1.25rem 0.5rem 2.25rem !important;
   font-size: 0.8rem;
   font-weight: 500;
   color: var(--text-muted);
   background: none;
   border: none;
-  width: 100%;
+  width: 180px;
   text-align: left;
   cursor: pointer;
-  transition: var(--transition);
+  transition: background-color 0.15s ease, color 0.15s ease;
+  white-space: nowrap;
+  overflow: hidden;
+  flex-shrink: 0;
+  border-left: 3px solid transparent;
 }
 
 .aidu-menu-subitem:hover {
@@ -1659,7 +1695,7 @@ body.dark-theme .aidu-menu-item.active {
   background-color: var(--primary-light);
   color: var(--primary);
   border-left: 3px solid var(--primary);
-  padding-left: calc(2.25rem - 3px);
+  padding-left: calc(2.25rem - 3px) !important;
 }
 
 body.dark-theme .aidu-menu-subitem.active {
@@ -1676,31 +1712,32 @@ body.dark-theme .aidu-menu-subitem.active {
 }
 
 .aidu-settings-panel {
-  width: 250px;
+  width: 260px;
   background-color: var(--bg-card);
   border-right: 1px solid var(--border-color);
-  padding: 1.25rem;
+  padding: 0.75rem;
   display: flex;
   flex-direction: column;
-  gap: 1.25rem;
+  gap: 0.75rem;
   overflow-y: auto;
   flex-shrink: 0;
 }
 
 .aidu-results-panel {
   flex: 1;
-  padding: 1.25rem;
+  padding: 0.75rem;
   overflow-y: auto;
   display: flex;
   flex-direction: column;
-  gap: 1.25rem;
+  gap: 0.75rem;
+  background-color: #f4f5f7; /* Very light gray/blue corporate background */
 }
 
 .aidu-section-title {
-  font-size: 0.875rem;
+  font-size: 0.75rem;
   font-weight: 700;
   color: var(--text-main);
-  margin-bottom: 0.5rem;
+  margin-bottom: 0.35rem;
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -1709,51 +1746,59 @@ body.dark-theme .aidu-menu-subitem.active {
 .aidu-column-list {
   display: flex;
   flex-direction: column;
-  gap: 0.4rem;
-  max-height: 320px;
+  gap: 0.15rem;
+  max-height: 380px;
   overflow-y: auto;
-  padding-right: 0.25rem;
+  padding-right: 0.2rem;
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  padding: 0.25rem;
+  background-color: var(--bg-main);
 }
 
 .aidu-column-item {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0.45rem 0.6rem;
-  border: 1px solid var(--border-color);
-  border-radius: 6px;
+  padding: 0.15rem 0.35rem;
+  border: 1px solid #dfe1e6;
+  border-radius: 4px;
   background-color: var(--bg-card);
   cursor: pointer;
   user-select: none;
-  font-size: 0.8rem;
+  font-size: 0.68rem;
   transition: var(--transition);
 }
 
 .aidu-column-item:hover {
-  border-color: var(--border-hover);
+  border-color: #b3bac5;
   background-color: var(--bg-main);
 }
 
 .aidu-column-item.selected {
-  border-color: var(--primary);
-  background-color: var(--primary-light);
-  color: var(--primary);
+  border-color: #0052cc;
+  background-color: #deebff;
+  color: #0747a6;
   font-weight: 600;
 }
 
 body.dark-theme .aidu-column-item.selected {
-  background-color: rgba(99, 102, 241, 0.15);
-  border-color: #6366f1;
-  color: #a5b4fc;
+  background-color: rgba(0, 82, 204, 0.15);
+  border-color: #4c86e7;
+  color: #92b7ff;
 }
 
 .aidu-column-type {
-  font-size: 0.65rem;
+  font-size: 0.54rem;
   color: var(--text-muted);
   background-color: var(--bg-main);
-  padding: 0.1rem 0.35rem;
-  border-radius: 4px;
+  padding: 0.02rem 0.2rem;
+  border-radius: 3px;
   font-family: monospace;
+  flex-shrink: 0;
+  display: inline-block;
+  text-align: center;
+  white-space: nowrap;
 }
 
 .aidu-column-item.selected .aidu-column-type {
@@ -1762,18 +1807,18 @@ body.dark-theme .aidu-column-item.selected {
 
 .aidu-card {
   background-color: var(--bg-card);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-sm);
-  padding: 1.25rem;
-  box-shadow: var(--shadow-sm);
+  border: 1px solid #dfe1e6;
+  border-radius: 4px;
+  padding: 0.65rem 0.8rem;
+  box-shadow: none; /* Flat clean corporate cards */
 }
 
 .aidu-card-header {
-  font-size: 0.9rem;
+  font-size: 0.8rem;
   font-weight: 700;
-  border-bottom: 1px solid var(--border-color);
-  padding-bottom: 0.5rem;
-  margin-bottom: 1rem;
+  border-bottom: 1px solid #dfe1e6;
+  padding-bottom: 0.35rem;
+  margin-bottom: 0.65rem;
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -1782,7 +1827,7 @@ body.dark-theme .aidu-column-item.selected {
 .aidu-results-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 1.25rem;
+  gap: 0.75rem;
   align-items: start;
 }
 
@@ -1795,18 +1840,18 @@ body.dark-theme .aidu-column-item.selected {
 .aidu-table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 0.8rem;
+  font-size: 0.72rem;
   text-align: left;
 }
 
 .aidu-table th, .aidu-table td {
-  padding: 0.45rem 0.6rem;
-  border-bottom: 1px solid var(--border-color);
+  padding: 0.22rem 0.4rem;
+  border-bottom: 1px solid #dfe1e6;
 }
 
 .aidu-table th {
   background-color: var(--bg-main);
-  color: var(--text-muted);
+  color: #5e6c84;
   font-weight: 700;
 }
 
@@ -1829,12 +1874,13 @@ body.dark-theme .aidu-column-item.selected {
   display: flex;
   align-items: flex-end;
   justify-content: space-around;
-  height: 140px;
-  border-left: 2px solid var(--text-light);
-  border-bottom: 2px solid var(--text-light);
-  padding: 0.5rem 0.5rem 0 0.5rem;
-  margin-top: 1rem;
+  height: 120px;
+  border-left: 1.5px solid var(--text-light);
+  border-bottom: 1.5px solid var(--text-light);
+  padding: 0.5rem 0.25rem 0 0.25rem;
+  margin-top: 0.75rem;
   position: relative;
+  gap: 1px;
 }
 
 .aidu-chart-bar-wrapper {
@@ -1842,7 +1888,7 @@ body.dark-theme .aidu-column-item.selected {
   flex-direction: column;
   align-items: center;
   flex: 1;
-  max-width: 45px;
+  max-width: 36px;
   height: 100%;
   justify-content: flex-end;
   position: relative;
@@ -1884,15 +1930,16 @@ body.dark-theme .aidu-column-item.selected {
 }
 
 .aidu-chart-bar-label {
-  font-size: 0.65rem;
+  font-size: 0.58rem;
   color: var(--text-muted);
-  margin-top: 0.25rem;
+  margin-top: 0.2rem;
   position: absolute;
-  bottom: -20px;
+  bottom: -18px;
   white-space: nowrap;
   text-overflow: ellipsis;
   overflow: hidden;
-  max-width: 50px;
+  max-width: 40px;
+  text-align: center;
 }
 
 .aidu-stats-summary {

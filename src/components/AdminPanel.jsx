@@ -35,6 +35,7 @@ export default function AdminPanel({ onExit }) {
   const [qExplanation, setQExplanation] = useState('');
   const [qTimeLimit, setQTimeLimit] = useState(120); // default 2 minutes
   const [qReference, setQReference] = useState('');
+  const [qAiduEnabled, setQAiduEnabled] = useState(false);
 
   // CSV/JSON drag and drop state
   const [isDragOver, setIsDragOver] = useState(false);
@@ -44,6 +45,7 @@ export default function AdminPanel({ onExit }) {
   const [selectedAttemptForView, setSelectedAttemptForView] = useState(null);
   const [studentAnswers, setStudentAnswers] = useState([]);
   const [isAnswersLoading, setIsAnswersLoading] = useState(false);
+  const [csvUrlInput, setCsvUrlInput] = useState('');
 
   async function fetchExams() {
     setIsLoading(true);
@@ -54,27 +56,10 @@ export default function AdminPanel({ onExit }) {
         .order('id', { ascending: true });
 
       if (error) throw error;
-      
-      const updatedExams = (data || []).map(exam => {
-        const localCsv = localStorage.getItem(`exam_csv_${exam.id}`);
-        if (localCsv) {
-          try {
-            const { csvData, csvFilename } = JSON.parse(localCsv);
-            return {
-              ...exam,
-              csvData: csvData !== undefined ? csvData : exam.csvData,
-              csvFilename: csvFilename !== undefined ? csvFilename : exam.csvFilename
-            };
-          } catch (e) {
-            console.error('Error parsing local CSV settings override:', e);
-          }
-        }
-        return exam;
-      });
 
-      setExams(updatedExams);
-      if (updatedExams && updatedExams.length > 0) {
-        setSelectedExamId(updatedExams[0].id.toString());
+      setExams(data || []);
+      if (data && data.length > 0) {
+        setSelectedExamId(data[0].id.toString());
       }
     } catch (e) {
       console.error(e);
@@ -140,6 +125,15 @@ export default function AdminPanel({ onExit }) {
       }, 0);
     }
   }, [selectedExamId]);
+
+  useEffect(() => {
+    if (activeExam) {
+      const isUrl = activeExam.csvData && (activeExam.csvData.startsWith('http://') || activeExam.csvData.startsWith('https://'));
+      setCsvUrlInput(isUrl ? activeExam.csvData : '');
+    } else {
+      setCsvUrlInput('');
+    }
+  }, [selectedExamId, exams]);
 
   // Real-time student subscription
   useEffect(() => {
@@ -251,10 +245,7 @@ export default function AdminPanel({ onExit }) {
     if (!selectedExamId) return;
     setIsSyncing(true);
     try {
-      const hasCsvData = 'csvData' in fields;
-      const hasCsvFilename = 'csvFilename' in fields;
-
-      // Try updating remote db first
+      // Update remote db with standard fields
       const { data, error } = await supabase
         .from('Exam')
         .update({
@@ -265,67 +256,12 @@ export default function AdminPanel({ onExit }) {
         .select()
         .single();
 
-      if (error) {
-        const errorMsg = error.message || '';
-        // If csvData column does not exist in schema cache, handle fallback
-        if (errorMsg.includes('csvData') || errorMsg.includes('column')) {
-          console.warn('Supabase DB lacks csvData/csvFilename columns, using localStorage fallback');
-          
-          if (hasCsvData || hasCsvFilename) {
-            const localCsv = localStorage.getItem(`exam_csv_${selectedExamId}`);
-            let csvFields = {};
-            if (localCsv) {
-              try {
-                csvFields = JSON.parse(localCsv);
-              } catch {
-                console.warn('Failed to parse local CSV data from localStorage');
-              }
-            }
-            if (hasCsvData) csvFields.csvData = fields.csvData;
-            if (hasCsvFilename) csvFields.csvFilename = fields.csvFilename;
-            localStorage.setItem(`exam_csv_${selectedExamId}`, JSON.stringify(csvFields));
-          }
+      if (error) throw error;
 
-          // Retry with ONLY remote-supported fields
-          const remoteFields = { ...fields };
-          delete remoteFields.csvData;
-          delete remoteFields.csvFilename;
-
-          const { data: retryData, error: retryError } = await supabase
-            .from('Exam')
-            .update({
-              ...remoteFields,
-              updatedAt: Date.now()
-            })
-            .eq('id', parseInt(selectedExamId))
-            .select()
-            .single();
-
-          if (retryError) throw retryError;
-
-          const mergedData = {
-            ...retryData,
-            csvData: fields.csvData !== undefined ? fields.csvData : (JSON.parse(localStorage.getItem(`exam_csv_${selectedExamId}`) || '{}').csvData || null),
-            csvFilename: fields.csvFilename !== undefined ? fields.csvFilename : (JSON.parse(localStorage.getItem(`exam_csv_${selectedExamId}`) || '{}').csvFilename || null)
-          };
-
-          setExams(exams.map(ex => ex.id === mergedData.id ? mergedData : ex));
-        } else {
-          throw error;
-        }
-      } else {
-        setExams(exams.map(ex => ex.id === data.id ? data : ex));
-        if (hasCsvData || hasCsvFilename) {
-          const csvFields = {
-            csvData: data.csvData,
-            csvFilename: data.csvFilename
-          };
-          localStorage.setItem(`exam_csv_${selectedExamId}`, JSON.stringify(csvFields));
-        }
-      }
+      setExams(exams.map(ex => ex.id === data.id ? data : ex));
     } catch (err) {
       console.error(err);
-      alert('시간 설정 반영 오류: ' + err.message);
+      alert('설정 반영 오류: ' + err.message);
     } finally {
       setIsSyncing(false);
     }
@@ -366,6 +302,7 @@ export default function AdminPanel({ onExit }) {
     setQExplanation('');
     setQTimeLimit(120);
     setQReference('');
+    setQAiduEnabled(false);
     
     // Set next qNumber
     if (questions && questions.length > 0) {
@@ -388,6 +325,11 @@ export default function AdminPanel({ onExit }) {
       .map(item => item.trim())
       .filter(item => item !== '');
 
+    let refVal = qReference.trim();
+    if (qAiduEnabled) {
+      refVal = `<!--AIDU_MODE-->${refVal}`;
+    }
+
     const record = {
       exam: parseInt(selectedExamId),
       questionNumber: qNumber,
@@ -396,7 +338,7 @@ export default function AdminPanel({ onExit }) {
       type: qType,
       explanation: qExplanation.trim(),
       timeLimit: qTimeLimit,
-      reference: qReference.trim() || null
+      reference: refVal || null
     };
 
     if (qType === 'multiple-choice') {
@@ -465,7 +407,14 @@ export default function AdminPanel({ onExit }) {
     setQType(q.type);
     setQExplanation(q.explanation || '');
     setQTimeLimit(q.timeLimit || 0);
-    setQReference(q.reference || '');
+
+    if (q.reference && (q.reference.includes('<!--AIDU_MODE-->') || q.reference.includes('[markdown]'))) {
+      setQAiduEnabled(true);
+      setQReference(q.reference.replace('<!--AIDU_MODE-->', ''));
+    } else {
+      setQAiduEnabled(false);
+      setQReference(q.reference || '');
+    }
 
     if (q.type === 'multiple-choice') {
       setQOptions(q.options || ['', '', '', '']);
@@ -906,64 +855,160 @@ export default function AdminPanel({ onExit }) {
                     </div>
                   </div>
 
+                  {/* AIDU Practice Mode Setting */}
+                  <div className="form-group" style={{ flex: '1 1 200px', marginBottom: 0, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+                    <label style={{ fontWeight: 'bold', marginBottom: '0.5rem' }}>AIDU 실습 모드</label>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', userSelect: 'none' }}>
+                      <input
+                        type="checkbox"
+                        checked={activeExam.aiduEnabled || false}
+                        onChange={(e) => handleExamSettingsChange({ aiduEnabled: e.target.checked })}
+                        style={{ width: '18px', height: '18px' }}
+                      />
+                      <span style={{ fontSize: '0.9rem' }}>시험 내 AIDU 실습 기능 활성화</span>
+                    </label>
+                  </div>
+
                   {/* Exam-level CSV Upload */}
                   <div className="form-group" style={{ flex: '2 1 400px', marginBottom: 0 }}>
-                    <label style={{ fontWeight: 'bold' }}>시험지 전체 공유용 CSV 데이터셋 첨부 (선택)</label>
-                    <div style={{ display: 'flex', gap: '1rem', alignItems: 'center', marginTop: '0.25rem' }}>
-                      <input 
-                        type="file" 
-                        id="exam-csv-file-input"
-                        accept=".csv"
-                        style={{ display: 'none' }}
-                        onChange={(e) => {
-                          const file = e.target.files[0];
-                          if (!file) return;
-                          const reader = new FileReader();
-                          reader.onload = (evt) => {
-                            const arrayBuffer = evt.target.result;
-                            let text;
-                            try {
-                              const utf8Decoder = new TextDecoder('utf-8', { fatal: true });
-                              text = utf8Decoder.decode(arrayBuffer);
-                            } catch {
-                              try {
-                                const eucKrDecoder = new TextDecoder('euc-kr');
-                                text = eucKrDecoder.decode(arrayBuffer);
-                              } catch {
-                                alert('파일 인코딩 오류가 발생했습니다.');
+                    <label style={{ fontWeight: 'bold' }}>시험지 전체 공유용 CSV 데이터셋 설정 (택일)</label>
+                    <div style={{ 
+                      display: 'flex', 
+                      flexDirection: 'column', 
+                      gap: '0.75rem', 
+                      marginTop: '0.25rem', 
+                      padding: '0.75rem', 
+                      backgroundColor: 'var(--card-bg, #ffffff)', 
+                      borderRadius: 'var(--radius-sm, 6px)', 
+                      border: '1px solid var(--border-color, #e2e8f0)' 
+                    }}>
+                      
+                      {/* Method 1: Local File Upload */}
+                      <div>
+                        <span style={{ fontSize: '0.8rem', fontWeight: 'bold', display: 'block', marginBottom: '0.35rem', color: 'var(--text-light)' }}>방법 1. 로컬 CSV 파일 직접 업로드</span>
+                        <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
+                          <input 
+                            type="file" 
+                            id="exam-csv-file-input"
+                            accept=".csv"
+                            style={{ display: 'none' }}
+                            onChange={(e) => {
+                              const file = e.target.files[0];
+                              if (!file) return;
+                              const reader = new FileReader();
+                              reader.onload = (evt) => {
+                                const arrayBuffer = evt.target.result;
+                                let text;
+                                try {
+                                  const utf8Decoder = new TextDecoder('utf-8', { fatal: true });
+                                  text = utf8Decoder.decode(arrayBuffer);
+                                } catch {
+                                  try {
+                                    const eucKrDecoder = new TextDecoder('euc-kr');
+                                    text = eucKrDecoder.decode(arrayBuffer);
+                                  } catch {
+                                    alert('파일 인코딩 오류가 발생했습니다.');
+                                    return;
+                                  }
+                                }
+                                handleExamSettingsChange({
+                                  csvData: text,
+                                  csvFilename: file.name
+                                });
+                                setCsvUrlInput('');
+                              };
+                              reader.readAsArrayBuffer(file);
+                            }}
+                          />
+                          <button 
+                            type="button" 
+                            className="btn btn-secondary"
+                            style={{ fontSize: '0.8rem', padding: '0.4rem 0.8rem' }}
+                            onClick={() => document.getElementById('exam-csv-file-input').click()}
+                          >
+                            <UploadCloud size={14} style={{ marginRight: '4px', verticalAlign: 'middle' }} /> CSV 파일 선택
+                          </button>
+                        </div>
+                      </div>
+
+                      <div style={{ borderTop: '1px solid var(--border-color, #e2e8f0)', margin: '0.15rem 0' }}></div>
+
+                      {/* Method 2: Google Drive / Web Publish Link */}
+                      <div>
+                        <span style={{ fontSize: '0.8rem', fontWeight: 'bold', display: 'block', marginBottom: '0.35rem', color: 'var(--text-light)' }}>방법 2. 구글 스프레드시트 / 드라이브 공유 링크 연동</span>
+                        <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                          <input 
+                            type="text"
+                            className="form-control"
+                            style={{ fontSize: '0.8rem', padding: '0.4rem', flex: 1 }}
+                            placeholder="구글 스프레드시트 [웹에 게시(CSV)] 링크 또는 공유 링크 입력"
+                            value={csvUrlInput}
+                            onChange={(e) => setCsvUrlInput(e.target.value)}
+                          />
+                          <button
+                            type="button"
+                            className="btn btn-primary"
+                            style={{ fontSize: '0.8rem', padding: '0.4rem 0.8rem', whiteSpace: 'nowrap' }}
+                            onClick={() => {
+                              if (!csvUrlInput.trim()) {
+                                alert('링크를 입력해 주세요.');
                                 return;
                               }
-                            }
-                            handleExamSettingsChange({
-                              csvData: text,
-                              csvFilename: file.name
-                            });
-                          };
-                          reader.readAsArrayBuffer(file);
-                        }}
-                      />
-                      <button 
-                        type="button" 
-                        className="btn btn-secondary"
-                        style={{ fontSize: '0.8rem', padding: '0.4rem 0.8rem' }}
-                        onClick={() => document.getElementById('exam-csv-file-input').click()}
-                      >
-                        <UploadCloud size={14} style={{ marginRight: '4px', verticalAlign: 'middle' }} /> CSV 파일 선택
-                      </button>
-                      {activeExam.csvFilename ? (
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.8rem' }}>
-                          <span style={{ fontWeight: 'bold', color: 'var(--primary)' }}>{activeExam.csvFilename}</span>
-                          <span style={{ color: 'var(--text-muted)' }}>({(activeExam.csvData || '').split('\n').length - 1}행)</span>
+                              if (!csvUrlInput.startsWith('http://') && !csvUrlInput.startsWith('https://')) {
+                                alert('올바른 URL 형식이 아닙니다. http:// 또는 https://로 시작해야 합니다.');
+                                return;
+                              }
+                              
+                              let filename = 'google_drive_dataset.csv';
+                              if (csvUrlInput.includes('spreadsheets')) {
+                                filename = 'google_sheets_dataset.csv';
+                              }
+
+                              handleExamSettingsChange({
+                                csvData: csvUrlInput.trim(),
+                                csvFilename: filename
+                              });
+                            }}
+                          >
+                            링크 적용
+                          </button>
+                        </div>
+                        <p style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: '0.35rem', lineHeight: '1.4' }}>
+                          ※ <b>팁:</b> 구글 드라이브 일반 공유 링크는 브라우저 보안(CORS) 제한으로 직접 로드되지 않을 수 있습니다. 구글 스프레드시트의 <b>[파일] &gt; [공유] &gt; [웹에 게시]</b> 기능을 사용하여 <b>'쉼표로 구분된 값(.csv)'</b>으로 게시된 URL을 입력하시는 것을 권장합니다.
+                        </p>
+                      </div>
+
+                      {/* Active State */}
+                      {activeExam.csvFilename && (
+                        <div style={{ 
+                          marginTop: '0.25rem', 
+                          padding: '0.5rem 0.75rem', 
+                          backgroundColor: 'var(--primary-light, #eff6ff)', 
+                          border: '1px solid var(--primary, #3b82f6)', 
+                          borderRadius: 'var(--radius-sm, 4px)',
+                          display: 'flex', 
+                          alignItems: 'center', 
+                          justifyContent: 'space-between',
+                          gap: '0.5rem', 
+                          fontSize: '0.8rem' 
+                        }}>
+                          <div style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            <span style={{ fontWeight: 'bold', color: 'var(--primary, #2563eb)' }}>적용 중: {activeExam.csvFilename}</span>
+                            <span style={{ color: 'var(--text-light)', marginLeft: '0.5rem' }}>
+                              {activeExam.csvData && (activeExam.csvData.startsWith('http') ? '(외부 링크)' : `(${(activeExam.csvData || '').split('\n').length - 1}행)`)}
+                            </span>
+                          </div>
                           <button 
                             type="button" 
                             className="btn-text-action" 
-                            style={{ color: 'var(--danger)', fontSize: '0.8rem', marginLeft: '0.5rem' }}
+                            style={{ color: 'var(--danger, #dc2626)', fontSize: '0.8rem', fontWeight: 'bold', padding: 0, border: 'none', background: 'none', cursor: 'pointer' }}
                             onClick={() => {
-                              if (confirm('정말로 첨부된 CSV 데이터셋을 삭제하시겠습니까?')) {
+                              if (confirm('정말로 첨부된 데이터셋 설정을 해제하시겠습니까?')) {
                                 handleExamSettingsChange({
                                   csvData: null,
                                   csvFilename: null
                                 });
+                                setCsvUrlInput('');
                                 const fileInput = document.getElementById('exam-csv-file-input');
                                 if (fileInput) fileInput.value = '';
                               }
@@ -972,9 +1017,8 @@ export default function AdminPanel({ onExit }) {
                             삭제
                           </button>
                         </div>
-                      ) : (
-                        <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>첨부된 CSV 데이터셋이 없습니다. (이 시험은 일반 문제 전용)</span>
                       )}
+
                     </div>
                   </div>
                 </div>
@@ -1060,6 +1104,19 @@ export default function AdminPanel({ onExit }) {
                     value={qReference}
                     onChange={(e) => setQReference(e.target.value)}
                   />
+                </div>
+
+                <div className="form-group" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', margin: '0.75rem 0' }}>
+                  <input
+                    type="checkbox"
+                    id="aidu-mode-toggle"
+                    checked={qAiduEnabled}
+                    onChange={(e) => setQAiduEnabled(e.target.checked)}
+                    style={{ width: '16px', height: '16px', cursor: 'pointer' }}
+                  />
+                  <label htmlFor="aidu-mode-toggle" style={{ margin: 0, fontWeight: 'bold', fontSize: '0.85rem', cursor: 'pointer', color: 'var(--primary, #0052cc)' }}>
+                    AIDU 실습 모드 활성화 (해당 문제 풀이 시 우측에 데이터 가공/시각화 시뮬레이터 노출)
+                  </label>
                 </div>
 
                 {/* MCQ details */}
@@ -1345,6 +1402,19 @@ export default function AdminPanel({ onExit }) {
                         <td>{q.questionNumber}</td>
                         <td style={{ maxWidth: '120px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={q.questionText}>
                           {q.questionText}
+                          {(q.reference?.includes('<!--AIDU_MODE-->') || q.reference?.includes('[markdown]')) && (
+                            <span style={{ 
+                              marginLeft: '0.4rem', 
+                              backgroundColor: '#deebff', 
+                              color: '#0747a6', 
+                              fontSize: '0.62rem', 
+                              padding: '1px 4px', 
+                              borderRadius: '3px',
+                              fontWeight: 'bold'
+                            }}>
+                              AIDU
+                            </span>
+                          )}
                         </td>
                         <td>
                           <div style={{ display: 'flex', gap: '0.25rem' }}>
